@@ -1,0 +1,33 @@
+# Compiled binary
+darksage
+
+# C object files (intermediate build artifacts)
+*.o
+
+# Galaxy catalog output (can be large binary files)
+output/results/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Profiler output
+*.lprof
+*.prof
+
+# PSO run outputs (numbered run directories and logs)
+autocalibration/[0-9]*/
+autocalibration/tracks/
+shark_pso.log
+
+# macOS system files
+.DS_Store
+
+# Vim swap files
+*.swp
+*.swo
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
