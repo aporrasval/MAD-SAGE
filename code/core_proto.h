@@ -48,7 +48,6 @@ double dmax(double x, double y);
 double do_reionization(int centralgal, double Zcurr);
 double evolve_black_hole(int p, double dt);
 double bh_feedback(int p, double radio_supply, double instab_supply, double radio_net, double coolingGas_raw, double specific_energy_change, double dt);
-void   report_rk45_floor_stats(void);
 void collisional_starburst_recipe(double disc_mass_ratio[N_BINS], int merger_centralgal, int centralgal, double dt, int mode, int step, int k_now, double time);
 void update_from_star_formation(int p, double stars, double metallicity, int i);
 void update_from_feedback(int p, double reheated_mass, double metallicity, int i, double ejected_cold_mass);

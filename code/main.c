@@ -363,7 +363,6 @@ int main(int argc, char **argv)
         printf("\ndone file %d\n\n", filenr);
     }
 
-    report_rk45_floor_stats();
     exitfail = 0;
     return 0;
 }

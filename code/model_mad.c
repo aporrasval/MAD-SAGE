@@ -13,14 +13,6 @@
 #include "core_allvars.h"
 #include "core_proto.h"
 
-/* Diagnostic counters for the RK45 substep floor in integrate_spin_RK45().
- * Accumulated across the full run and printed by report_rk45_floor_stats(). */
-static int    N_floor_triggers        = 0;   /* total floor invocations */
-static int    N_calls_with_floor      = 0;   /* integrate_spin_RK45 calls that hit the floor >= once */
-static double sum_stepfactor_at_floor = 0.0; /* for computing mean stepsize_factor at trigger */
-static double min_stepfactor_at_floor = 1e30;
-static double max_stepfactor_at_floor = 0.0;
-static double sum_timefrac_at_first   = 0.0; /* time/dt_years at the FIRST floor hit per call */
 
 
 //!! added declaration before implementation
@@ -366,7 +358,6 @@ double integrate_spin_RK45(double *mass_ptr, double initial_spin, double initial
     
     const int MAX_SUBSTEPS = 500;  // Hard limit as requested
     int substep_count = 0;
-    int this_call_hit_floor = 0;  /* set on the first floor trigger in this call */
 
     // Compute actual mass inflow rate (Msun/yr) — constant over timestep
     double mdot_actual = initial_mdot_Edd * calcEddingtonAccretionRateFiducial(*mass_ptr); 
@@ -482,37 +473,6 @@ double integrate_spin_RK45(double *mass_ptr, double initial_spin, double initial
                 substep = dt_years * minimumFractionalTimeResolution;
             }
 
-            // Floor: if substep has shrunk below machine-precision threshold the inner loop
-            // would stall indefinitely (k values -> 0, error -> 0, step "accepted" with zero
-            // time advance). Force-accept the current proposed state at the floor size.
-            // This can occur for very stiff ODEs encountered in massive TNG100 halos.
-            if (!step_accepted && substep < dt_years * 1e-10) {
-                /* Diagnostics: record how stiff the ODE was and how far we had integrated. */
-                N_floor_triggers++;
-                if (!this_call_hit_floor) {
-                    this_call_hit_floor = 1;
-                    N_calls_with_floor++;
-                    sum_timefrac_at_first += time / dt_years;
-                }
-                if (stepsize_factor < min_stepfactor_at_floor) min_stepfactor_at_floor = stepsize_factor;
-                if (stepsize_factor > max_stepfactor_at_floor) max_stepfactor_at_floor = stepsize_factor;
-                sum_stepfactor_at_floor += stepsize_factor;
-
-                substep    = dt_years * 1e-10;
-                step_accepted = 1;
-                mass = proposed_mass;
-                spin = proposed_spin;
-                time += substep;
-                substep_count++;
-                double mdot_Edd_step = mdot_actual / calcEddingtonAccretionRateFiducial(mass);
-                double r_Edd_step    = mdot_Edd_step * radiativeEfficiencyThin(spin) / 0.1;
-                acc_jet_power     += calcJetPower(mass, spin, mdot_Edd_step, madness,
-                                                  mad_superEddington, mad_subEddington) * substep;
-                acc_magnetization += calcMagnetization(spin, r_Edd_step) * substep;
-                acc_etaEM         += etaEM(spin, r_Edd_step)             * substep;
-                acc_radiative_eff += radiativeEfficiencyThin(spin)        * substep;
-                acc_time          += substep;
-            }
         }
     }
 
@@ -700,9 +660,7 @@ double evolve_black_hole(int p, double dt)
         // core_build_model.c can do:  InstaBlackHoleMass += DeltaBlackHoleMass
         Gal[p].DeltaBlackHoleMass = instab_net;
 
-        // Accumulate mass lost to radiation and jets this sub-step.
-        // total_net already accounts for both radiative and jet losses inside the RK45 integrator.
-        Gal[p].BH_CumulativeMassLoss += (total_supply - total_net);
+
     }
     else
     {
@@ -932,24 +890,4 @@ double calculate_merger_spin_aligned(double M1, double a1, double M2, double a2,
     if(a_final < -0.998) a_final = -0.998;
 
     return a_final;
-}
-
-
-void report_rk45_floor_stats(void)
-{
-    printf("\n--- RK45 substep floor diagnostics ---\n");
-    if (N_floor_triggers == 0) {
-        printf("  No floor triggers recorded.\n");
-        printf("--------------------------------------\n\n");
-        return;
-    }
-    printf("  Total floor triggers:                    %d\n", N_floor_triggers);
-    printf("  integrate_spin_RK45 calls that hit floor: %d\n", N_calls_with_floor);
-    printf("  Mean stepsize_factor at trigger:         %.4e  (1.0 = converged)\n",
-           sum_stepfactor_at_floor / N_floor_triggers);
-    printf("  Min stepsize_factor at trigger:          %.4e  (most stiff)\n",  min_stepfactor_at_floor);
-    printf("  Max stepsize_factor at trigger:          %.4e  (closest to converged)\n", max_stepfactor_at_floor);
-    printf("  Mean time fraction covered at first hit: %.4f  (0=stalled immediately, 1=near end)\n",
-           sum_timefrac_at_first / N_calls_with_floor);
-    printf("--------------------------------------\n\n");
 }

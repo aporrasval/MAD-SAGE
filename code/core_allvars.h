@@ -162,7 +162,6 @@ struct GALAXY_OUTPUT
   float InstaBHaccreted;
   float RadioBlackHoleMass;
   float InstaBlackHoleMass;
-  float BH_CumulativeMassLoss;  // cumulative BH mass lost to radiation + jets across all sub-steps
   float Lbol;
 
   float LastMajorMerger;
@@ -303,7 +302,6 @@ struct GALAXY_OUTPUT_LARGE // new for age dimension
   float InstaBHaccreted;
   float RadioBlackHoleMass;
   float InstaBlackHoleMass;
-  float BH_CumulativeMassLoss;  // cumulative BH mass lost to radiation + jets across all sub-steps
   float Lbol;
 
   float LastMajorMerger;
@@ -482,7 +480,6 @@ struct GALAXY
   double InstaBHaccreted;
   double RadioBlackHoleMass;
   double InstaBlackHoleMass;
-  double BH_CumulativeMassLoss;  // cumulative BH mass lost to radiation + jets across all sub-steps
   double Lbol;
 
   double MaxRadioModeAccretionRate;
