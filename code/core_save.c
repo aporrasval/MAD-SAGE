@@ -414,13 +414,14 @@ void prepare_galaxy_for_output(int filenr, int tree, struct GALAXY *g, struct GA
 
   o->RadioBlackHoleMass = g->RadioBlackHoleMass;
   o->InstaBlackHoleMass = g->InstaBlackHoleMass;
+  o->BH_CumulativeMassLoss = g->BH_CumulativeMassLoss;
   o->Lbol = log10(g->Lbol);
 
   o->LastMajorMerger = g->LastMajorMerger * UnitTime_in_Megayears;
   o->LastMinorMerger = g->LastMinorMerger * UnitTime_in_Megayears;
   o->NumMajorMergers = g->NumMajorMergers;
   o->NumMinorMergers = g->NumMinorMergers;
-  
+
   o->SNreheatRate = g->SNreheatRate * UnitMass_in_g / UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS;
   o->SNejectRate = g->SNejectRate * UnitMass_in_g / UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS;
 
@@ -652,11 +653,12 @@ void prepare_galaxy_for_output_large(int filenr, int tree, struct GALAXY *g, str
 
   o->RadioBlackHoleMass = g->RadioBlackHoleMass;
   o->InstaBlackHoleMass = g->InstaBlackHoleMass;
+  o->BH_CumulativeMassLoss = g->BH_CumulativeMassLoss;
   o->Lbol = log10(g->Lbol);
 
   o->LastMajorMerger = g->LastMajorMerger * UnitTime_in_Megayears;
   o->LastMinorMerger = g->LastMinorMerger * UnitTime_in_Megayears;
-  
+
   o->NumMajorMergers = g->NumMajorMergers;
   o->NumMinorMergers = g->NumMinorMergers;
 

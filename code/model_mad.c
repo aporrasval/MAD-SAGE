@@ -700,6 +700,10 @@ double evolve_black_hole(int p, double dt)
         // Leave DeltaBlackHoleMass holding only the instability fraction so that
         // core_build_model.c can do:  InstaBlackHoleMass += DeltaBlackHoleMass
         Gal[p].DeltaBlackHoleMass = instab_net;
+
+        // Accumulate mass lost to radiation and jets this sub-step.
+        // total_net already accounts for both radiative and jet losses inside the RK45 integrator.
+        Gal[p].BH_CumulativeMassLoss += (total_supply - total_net);
     }
     else
     {

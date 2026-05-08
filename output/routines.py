@@ -120,6 +120,7 @@ def galdtype_darksage(Nannuli=30,Nage=1):
                     ('InstaBHaccreted'                      , floattype),                    
                     ('RadioBlackHoleMass'                      , floattype),
                     ('InstaBlackHoleMass'                      , floattype),
+                    ('BH_CumulativeMassLoss'                   , floattype),
                     ('Lbol'                      , floattype),
                     ('LastMajorMerger'              , floattype),
                     ('LastMinorMerger'              , floattype),
