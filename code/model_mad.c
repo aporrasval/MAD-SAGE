@@ -597,29 +597,28 @@ void update_black_hole_spin(int p, double accreted_mass, double dt, int coherent
     Gal[p].BlackHoleMass = new_mass_msun * Hubble_h / 1e10;
     Gal[p].BlackHoleSpin = new_spin;
  
-    // mdot_Edd at final mass — matches Python's eddingtonRatioFunction call
-    mdot_Edd_final = mdot_actual / calcEddingtonAccretionRateFiducial(new_mass_msun);
-    if(mdot_Edd_final > 1000.0) mdot_Edd_final = 1000.0;
-
-    // r_Edd needed for functions that take r_Edd (calcMagnetization, etaEM)
-    double r_Edd_final = mdot_Edd_final * radiativeEfficiencyThin(new_spin) / 0.1;
-
     // Calculate final properties using NEW mdot_Edd
-    // magnetization = calcMagnetization(new_spin, r_Edd_final);
-    // jet_power = calcJetPower(new_mass_msun, new_spin, mdot_Edd_final, madness, mad_superEddington, mad_subEddington);
-    // jet_efficiency = etaEM(new_spin, r_Edd_final);
-    // radiative_eff = radiativeEfficiencyThin(new_spin);
     magnetization  = avg_magnetization;
     jet_power      = avg_jet_power;
     jet_efficiency = avg_etaEM;
     radiative_eff  = avg_radiative_eff;
 
     // Store final values
-    Gal[p].Eddrate = mdot_Edd_final;  // Use NEW mdot_Edd
+    Gal[p].Eddrate = mdot_Edd_initial;  // Use NEW mdot_Edd
     Gal[p].BH_Magnetization = magnetization;
     Gal[p].BH_JetPower = jet_power;
     Gal[p].BH_JetEfficiency = jet_efficiency;
     Gal[p].BH_thindiskRadiativeEfficiency = radiative_eff;
+
+    // DEBUG: print spin and accretion rates if BH mass more than doubled this sub-step, then crash
+    if(new_mass_msun / mass_msun > 2.0)
+    {
+        printf("DEBUG update_black_hole_spin: spin_initial=%.6f  spin_final=%.6f  "
+               "mdot_Edd_initial=%.6e  mdot_actual=%.6e (Msun/yr)\n",
+               spin, new_spin, mdot_Edd_initial, mdot_actual);
+        fflush(stdout);
+        abort();
+    }
 }
 
 void update_black_hole_spin_coherent(int p, double accreted_mass, double dt) {
