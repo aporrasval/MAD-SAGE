@@ -357,8 +357,8 @@ void read_parameter_file(char *fname)
     if(NOUT == -1)
     {
         NOUT = MAXSNAPS;
-        for (i=NOUT-1; i>=0; i--)
-        ListOutputSnaps[i] = i;
+        for (i=0; i<NOUT; i++)
+            ListOutputSnaps[i] = NOUT-1-i;  // highest snap first, matching the manual listing convention
         printf("all %i snapshots selected for output\n", NOUT);
     }
     else

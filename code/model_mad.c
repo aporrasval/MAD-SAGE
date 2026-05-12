@@ -356,7 +356,12 @@ double integrate_spin_RK45(double *mass_ptr, double initial_spin, double initial
     double acc_time         = 0.0;
 
     
-    const int MAX_SUBSTEPS = 500;  // Hard limit as requested
+    // Raised from 500 to 10000: BHs near maximum spin (a~1) in the ADAF regime have large da/dt
+    // (calcSpinupMAD pulls strongly toward equilibrium at a~0.035) and large negative dM/dt
+    // (jet efficiency eta_EM > 1), requiring many small RK45 substeps to stay within tolerance.
+    // At 500, these cases hit the limit before completing dt_years, leaving the BH at artificially
+    // high spin and sustaining mass loss into subsequent snapshots.  Normal cases complete in ~2 steps.
+    const int MAX_SUBSTEPS = 10000;
     int substep_count = 0;
 
     // Compute actual mass inflow rate (Msun/yr) — constant over timestep
@@ -506,10 +511,9 @@ void update_black_hole_spin(int p, double accreted_mass, double dt, int coherent
                            double madness, int mad_superEddington, int mad_subEddington) {
 
     double mass_msun, spin, mdot_edd_initial, mdot_actual, mdot_Edd_initial, new_spin, new_mass_msun;
-    double mdot_Edd_final, magnetization, jet_power, jet_efficiency, radiative_eff;
+    double magnetization, jet_power, jet_efficiency, radiative_eff;
     double avg_jet_power = 0.0, avg_magnetization = 0.0;
     double avg_etaEM = 0.0, avg_radiative_eff = 0.0;
-
 
     mass_msun = Gal[p].BlackHoleMass * 1e10 / Hubble_h;
     spin = Gal[p].BlackHoleSpin;
@@ -551,7 +555,31 @@ void update_black_hole_spin(int p, double accreted_mass, double dt, int coherent
     if(!coherent) {
         new_spin = (drand48() < 0.5) ? fabs(new_spin) : -fabs(new_spin);
     }
-    
+
+    // ---- diagnostic: flag large mass drops ----
+    // Triggers when the BH loses more than 50% of its mass in one spin-update call.
+    // Reports whether the integrator hit the MAX_SUBSTEPS limit (convergence failure)
+    // or whether the loss is due to large jet efficiency (physical but potentially extreme).
+    static int diag_count = 0;
+    if(new_mass_msun < mass_msun && diag_count < 20) {
+        double loss_factor = new_mass_msun / mass_msun;
+        double eta_jet     = avg_etaEM;
+        double epsilon_rad = avg_radiative_eff;
+        printf("[MASS-DROP diag %d]  initial_M=%.3e Msun  final_M=%.3e Msun  ratio=%.4f\n"
+               "                    spin_i=%.4f  spin_f=%.4f  mdot_Edd=%.3e\n"
+               "                    eta_EM=%.4f  epsilon_rad=%.4f  lossFactor~%.4f\n"
+               "                    substeps=%d  dt_yr=%.3e  MAX_SUBSTEPS=%d\n",
+               diag_count, mass_msun, new_mass_msun, loss_factor,
+               spin, new_spin, mdot_Edd_initial,
+               eta_jet, epsilon_rad, 1.0 - epsilon_rad - eta_jet,
+               substeps_taken, dt_years, 10000);  // 10000 = MAX_SUBSTEPS in integrate_spin_RK45
+        diag_count++;
+        if(diag_count >= 20) {
+            printf("[MASS-DROP diag] 20 cases printed — suppressing further output\n");
+        }
+    }
+    // ---- end diagnostic ----
+
     double DeltaBlackHoleMass = (new_mass_msun * Hubble_h / 1e10) - Gal[p].BlackHoleMass;
     Gal[p].DeltaBlackHoleMass = DeltaBlackHoleMass;  // net increment (after losses) from this sub-step's accretion
     Gal[p].BlackHoleMass = new_mass_msun * Hubble_h / 1e10;
@@ -570,15 +598,6 @@ void update_black_hole_spin(int p, double accreted_mass, double dt, int coherent
     Gal[p].BH_JetEfficiency = jet_efficiency;
     Gal[p].BH_thindiskRadiativeEfficiency = radiative_eff;
 
-    // DEBUG: print spin and accretion rates if BH mass more than doubled this sub-step, then crash
-    if(new_mass_msun / mass_msun > 2.0)
-    {
-        printf("DEBUG update_black_hole_spin: spin_initial=%.6f  spin_final=%.6f  "
-               "mdot_Edd_initial=%.6e  mdot_actual=%.6e (Msun/yr)\n",
-               spin, new_spin, mdot_Edd_initial, mdot_actual);
-        fflush(stdout);
-        abort();
-    }
 }
 
 void update_black_hole_spin_coherent(int p, double accreted_mass, double dt) {
@@ -639,7 +658,8 @@ double evolve_black_hole(int p, double dt)
         // Single unified spin update using the combined supply from both channels.
         // Coherent (disc-aligned) accretion applies when the instability supply dominates;
         // incoherent (random-orientation) accretion applies when the hot-gas supply dominates.
-        int coherent = (instab_supply >= radio_supply) ? 1 : 0;
+        // int coherent = (instab_supply >= radio_supply) ? 1 : 0;
+        int coherent = 1;
         update_black_hole_spin(p, total_supply, dt, coherent, 1.0, 1, 1);
 
         // update_black_hole_spin() has updated BlackHoleMass and set DeltaBlackHoleMass to
@@ -821,7 +841,7 @@ double calculate_merger_spin_aligned(double M1, double a1, double M2, double a2,
     double q, nu, a_final, l_orb;
     double s4, s5, t0, t2, t3;
     double cosAlpha, cosBeta, cosGamma;
-    double underRadical, J_total;
+    double J_total;
     
     // Ensure M1 >= M2 (swap if needed)
     if(M2 > M1) {

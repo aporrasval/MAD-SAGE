@@ -95,8 +95,8 @@ void init_galaxy(int p, int halonr)
     Gal[p].BlackHoleSpin = SpinSeedValue;  // ADD for BH spin
     Gal[p].BH_Magnetization = 0.0; 
     Gal[p].BH_JetPower = 0.0;
-    Gal[p].BH_JetEfficiency = 0.1;
-    Gal[p].BH_thindiskRadiativeEfficiency = 0.1;
+    Gal[p].BH_JetEfficiency = 0.0;
+    Gal[p].BH_thindiskRadiativeEfficiency = 0.0;
     Gal[p].Eddrate = 0.0;     
     Gal[p].PrimaryBHMass = 0.0;
     Gal[p].SecondaryBHMass = 0.0;

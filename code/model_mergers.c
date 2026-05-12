@@ -735,14 +735,14 @@ void add_galaxies_together(int t, int p, int centralgal, int k_now, double mass_
   assert(Gal[t].BlackHoleMass>=0.0);
   
   /*Add BH-BH merger spin*/
-  if (SpinEvolutionOn > 0) {
-    double theta1 = acos(1.0 - 2.0*drand48()) * (drand48() > 0.5 ? 1.0 : -1.0);
-    double theta2 = acos(1.0 - 2.0*drand48()) * (drand48() > 0.5 ? 1.0 : -1.0);
-    double phi1 = 2.0 * M_PI * drand48();
-    double phi2 = 2.0 * M_PI * drand48();
-    Gal[t].BlackHoleSpin = calculate_merger_spin_aligned(Gal[t].PrimaryBHMass, Gal[t].PrimaryBHSpin, 
-      Gal[t].SecondaryBHMass, Gal[t].SecondaryBHSpin, theta1, theta2, phi1, phi2); 
-  }
+  // if (SpinEvolutionOn > 0) {
+  //   double theta1 = acos(1.0 - 2.0*drand48()) * (drand48() > 0.5 ? 1.0 : -1.0);
+  //   double theta2 = acos(1.0 - 2.0*drand48()) * (drand48() > 0.5 ? 1.0 : -1.0);
+  //   double phi1 = 2.0 * M_PI * drand48();
+  //   double phi2 = 2.0 * M_PI * drand48();
+  //   Gal[t].BlackHoleSpin = calculate_merger_spin_aligned(Gal[t].PrimaryBHMass, Gal[t].PrimaryBHSpin, 
+  //     Gal[t].SecondaryBHMass, Gal[t].SecondaryBHSpin, theta1, theta2, phi1, phi2); 
+  // }
 
   for(step = 0; step < STEPS; step++)
   {

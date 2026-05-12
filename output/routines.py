@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import sys
 import os
 
-def galdtype_darksage(Nannuli=30,Nage=1):
+def galdtype_darksage(Nannuli=30,Nage=30):
     floattype = np.float32
     
     # Account for whether age bins are used for stars or not
@@ -16,7 +16,7 @@ def galdtype_darksage(Nannuli=30,Nage=1):
         disc_arr_dim = Nannuli
         bulge_arr_type = floattype
 
-    Galdesc_full = [
+    Galdesc_full = [                                   
                     ('Type'                         , np.int32),
                     ('TypeMax'                      , np.int32),
                     ('GalaxyIndex'                  , np.int64),
@@ -114,6 +114,10 @@ def galdtype_darksage(Nannuli=30,Nage=1):
                     ('RotSupportScaleRadius'        , floattype),
                     ('Cooling'                      , floattype),
                     ('Heating'                      , floattype),
+                    ('QuasarEnergy'                      , floattype),
+                    ('AGNheating'                      , floattype),
+                    ('AGNfountain'                      , floattype),  
+                    ('CurrentRadioBlackHoleMass'                      , floattype),  
                     ('BHaccreted'                      , floattype),
                     ('BondiBHaccreted'                      , floattype),
                     ('RadioBHaccreted'                      , floattype),
@@ -135,6 +139,7 @@ def galdtype_darksage(Nannuli=30,Nage=1):
     formats = [Galdesc_full[i][1] for i in range(len(Galdesc_full))]
     Galdesc = np.dtype({'names':names, 'formats':formats}, align=True)
     return Galdesc
+
 
 
 
