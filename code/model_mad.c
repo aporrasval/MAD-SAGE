@@ -440,11 +440,11 @@ double integrate_spin_RK45(double *mass_ptr, double initial_spin, double initial
 
             double stepsize_factor_mass, stepsize_factor_spin;
 
-            stepsize_factor_mass = (truncation_error_mass > 0) ? 0.9 * pow(allowedFractionalMassError / (truncation_error_mass / mass), 0.2) : 1e30;
-            stepsize_factor_spin = (truncation_error_spin > 0) ? 0.9 * pow(allowedSpinError / truncation_error_spin, 0.2) : 1e30;
+            // stepsize_factor_mass = (truncation_error_mass > 0) ? 0.9 * pow(allowedFractionalMassError / (truncation_error_mass / mass), 0.2) : 1e30;
+            // stepsize_factor_spin = (truncation_error_spin > 0) ? 0.9 * pow(allowedSpinError / truncation_error_spin, 0.2) : 1e30;
 
-            //stepsize_factor_mass = 0.9 * pow(allowedFractionalMassError / (truncation_error_mass / mass), 0.2);
-            //stepsize_factor_spin = 0.9 * pow(allowedSpinError / truncation_error_spin, 0.2);
+            stepsize_factor_mass = 0.9 * pow(allowedFractionalMassError / (truncation_error_mass / mass), 0.2);
+            stepsize_factor_spin = 0.9 * pow(allowedSpinError / truncation_error_spin, 0.2);
 
             // double stepsize_factor_spin = 0.9 * pow(allowedSpinError / (truncation_error + 1e-30), 0.2);
             
