@@ -580,6 +580,83 @@ void update_black_hole_spin(int p, double accreted_mass, double dt, int coherent
     }
     // ---- end diagnostic ----
 
+    // ---- DIAGNOSTIC A: mass ratio < 1.2 ----------------------------------------
+    // Prints one case where the BH mass grew by less than 20% this call, then crashes.
+    // Enable by setting diag_A_done = 0.
+    {
+        static int diag_A_done = 1;
+        if(!diag_A_done && new_mass_msun / mass_msun < 1.2) {
+            printf("spin_initial=%.6f  spin_final=%.6f  mdot_Edd_initial=%.6e  "
+                   "mdot_actual=%.6e (Msun/yr)  substeps=%d\n",
+                   spin, new_spin, mdot_Edd_initial, mdot_actual, substeps_taken);
+            fflush(stdout);
+            diag_A_done = 1;
+            abort();
+        }
+    }
+    // ---- end DIAGNOSTIC A -------------------------------------------------------
+
+    // ---- DIAGNOSTIC B: 0.9 < mass ratio < 1.0 (mild mass loss) -----------------
+    // Prints one case where the BH lost a small amount of mass this call, then crashes.
+    // Enable by setting diag_B_done = 0.
+    {
+        static int diag_B_done = 1;
+        if(!diag_B_done && new_mass_msun < mass_msun && new_mass_msun / mass_msun > 0.9) {
+            printf("spin_initial=%.6f  spin_final=%.6f  mdot_Edd_initial=%.6e  "
+                   "mdot_actual=%.6e (Msun/yr)  substeps=%d\n",
+                   spin, new_spin, mdot_Edd_initial, mdot_actual, substeps_taken);
+            fflush(stdout);
+            diag_B_done = 1;
+            abort();
+        }
+    }
+    // ---- end DIAGNOSTIC B -------------------------------------------------------
+
+    // ---- DIAGNOSTIC C: one sample per mdot_Edd bin (~1e-3,1e-2,1e-1,1e1,1e2) --
+    // Collects the first example in each of five Eddington-ratio decades, prints all
+    // five, then crashes.  Enable by setting diag_C_done = 0.
+    {
+        static int diag_C_done  = 1;
+        static int diag_C_bins[5] = {0, 0, 0, 0, 0};  // filled flags per bin
+        static double diag_C_spin_i[5], diag_C_spin_f[5];
+        static double diag_C_mdot_Edd[5], diag_C_mdot_act[5];
+        static int    diag_C_steps[5];
+        const char   *diag_C_labels[5] = {"1e-03","1e-02","1e-01","1e+01","1e+02"};
+        // bin edges: ~1e-3, ~1e-2, ~1e-1, ~1e+1, ~1e+2
+        const double  lo[5] = {5e-4, 5e-3, 5e-2, 5.0,  50.0};
+        const double  hi[5] = {5e-3, 5e-2, 5e-1, 50.0, 500.0};
+
+        if(!diag_C_done) {
+            for(int b = 0; b < 5; b++) {
+                if(!diag_C_bins[b] && mdot_Edd_initial >= lo[b] && mdot_Edd_initial < hi[b]) {
+                    diag_C_bins[b]    = 1;
+                    diag_C_spin_i[b]  = spin;
+                    diag_C_spin_f[b]  = new_spin;
+                    diag_C_mdot_Edd[b]= mdot_Edd_initial;
+                    diag_C_mdot_act[b]= mdot_actual;
+                    diag_C_steps[b]   = substeps_taken;
+                }
+            }
+            // Once all five bins are filled, print and crash
+            int all_filled = 1;
+            for(int b = 0; b < 5; b++) all_filled &= diag_C_bins[b];
+            if(all_filled) {
+                for(int b = 0; b < 5; b++) {
+                    printf("[mdot_Edd~%s] spin_initial=%.6f  spin_final=%.6f  "
+                           "mdot_Edd_initial=%.6e  mdot_actual=%.6e (Msun/yr)  substeps=%d\n",
+                           diag_C_labels[b],
+                           diag_C_spin_i[b], diag_C_spin_f[b],
+                           diag_C_mdot_Edd[b], diag_C_mdot_act[b],
+                           diag_C_steps[b]);
+                }
+                fflush(stdout);
+                diag_C_done = 1;
+                abort();
+            }
+        }
+    }
+    // ---- end DIAGNOSTIC C -------------------------------------------------------
+
     double DeltaBlackHoleMass = (new_mass_msun * Hubble_h / 1e10) - Gal[p].BlackHoleMass;
     Gal[p].DeltaBlackHoleMass = DeltaBlackHoleMass;  // net increment (after losses) from this sub-step's accretion
     Gal[p].BlackHoleMass = new_mass_msun * Hubble_h / 1e10;
