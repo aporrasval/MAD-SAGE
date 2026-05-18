@@ -185,6 +185,34 @@ for log_target in LOG_TARGETS:
         'filenr':     filenr,
         'tree_idx':   tree_idx,
         'halo_nr':    halo_nr,
+        'sample':     False,
+    })
+
+# All BHs with log mass in [9.0, 10.5] at z=0 (excluding named targets), traced via halo merger tree
+# Collect GalaxyIndex values already chosen as named targets so we don't duplicate
+named_gidx = set(int(z0_all[
+    np.where(bh_msun > 0)[0][np.argmin(np.abs(np.log10(bh_msun[bh_msun > 0]) - lt))]
+]['GalaxyIndex']) for lt in LOG_TARGETS)
+
+mass_sample_mask = (bh_msun > 10**9.0) & (bh_msun < 10**10.5)
+sample_pool = np.array([i for i in np.where(mass_sample_mask)[0]
+                        if int(z0_all[i]['GalaxyIndex']) not in named_gidx])
+chosen = sample_pool  # use all 16
+
+print(f"\nMassive BH sample ({len(chosen)} galaxies near log M=10, traced via tree):")
+for idx in chosen:
+    gal = z0_all[idx]
+    filenr, tree_idx, galaxy_nr = decode_galaxy_index(int(gal['GalaxyIndex']))
+    halo_nr = int(gal['HaloIndex'])
+    print(f"  M_BH={bh_msun[idx]:.3e} Msun (log={np.log10(bh_msun[idx]):.2f})  "
+          f"filenr={filenr}  tree={tree_idx}  HaloIndex={halo_nr}")
+    targets.append({
+        'log_target': None,
+        'label':      None,
+        'filenr':     filenr,
+        'tree_idx':   tree_idx,
+        'halo_nr':    halo_nr,
+        'sample':     True,
     })
 
 # ---------------------------------------------------------------------------
@@ -252,58 +280,89 @@ for i, tgt in enumerate(targets):
     histories.append(hist)
 
 # ---------------------------------------------------------------------------
-# Step 3: plot
+# Step 3: helper to decorate axes
 # ---------------------------------------------------------------------------
 colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
 
-fig, axes = plt.subplots(3, 1, figsize=(10, 9), sharex=True)
-fig.subplots_adjust(hspace=0.05)
+def decorate_axes(axes):
+    axes[0].set_ylabel(r'$M_\bullet\ [M_\odot]$', fontsize=12)
+    axes[0].set_ylim(1e4, 1e11)
+    axes[0].legend(fontsize=9, loc='upper left', ncol=2)
+    axes[0].yaxis.set_major_formatter(ticker.LogFormatterMathtext())
 
-for hist, tgt, color in zip(histories, targets, colors):
-    if not hist:
+    axes[1].axhline(0, color='k', lw=0.6, ls=':')
+    axes[1].set_ylabel(r'$a_\bullet$', fontsize=12)
+    axes[1].set_ylim(-1.05, 1.05)
+
+    axes[2].axhspan(0.3 * fEdd_ADAF, fEdd_ADAF, color='black', alpha=0.4, zorder=0,
+                    label='ADAF transition')
+    axes[2].set_ylabel(r'$\dot{m}$', fontsize=12)
+    axes[2].set_xlabel(r'$t_{\rm ABB}\ [\rm Gyr]$', fontsize=12)
+    axes[2].set_ylim(1e-6, 1e2)
+
+    ax_top  = axes[0].twiny()
+    z_ticks = [10, 6, 4, 2, 1, 0.5, 0]
+    t_ticks = [age_gyr(1.0 / (1 + z)) if z < 100 else ages_gyr[0] for z in z_ticks]
+    ax_top.set_xlim(axes[0].get_xlim())
+    ax_top.set_xticks(t_ticks)
+    ax_top.set_xticklabels([str(z) for z in z_ticks])
+    ax_top.set_xlabel('z', fontsize=12)
+
+    for ax in axes:
+        ax.set_xlim(ages_gyr[0], ages_gyr[-1])
+
+# ---------------------------------------------------------------------------
+# Plot 1: 5 named targets only  (bh_history.pdf/png)
+# ---------------------------------------------------------------------------
+fig1, axes1 = plt.subplots(3, 1, figsize=(10, 9), sharex=True)
+fig1.subplots_adjust(hspace=0.05)
+
+for hist, tgt in zip(histories, targets):
+    if tgt['sample'] or not hist:
         continue
     t_arr    = np.array([h['t']    for h in hist])
     M_arr    = np.array([h['M_BH'] for h in hist])
     spin_arr = np.array([h['spin'] for h in hist])
-    Edd_arr  = np.array([h['Edd']  for h in hist])
-    Edd_arr  = np.where(Edd_arr > 0, Edd_arr, np.nan)
+    Edd_arr  = np.where(np.array([h['Edd'] for h in hist]) > 0,
+                        np.array([h['Edd'] for h in hist]), np.nan)
+    color = colors[LOG_TARGETS.index(tgt['log_target'])]
+    axes1[0].semilogy(t_arr, M_arr,    color=color, lw=1.5, label=tgt['label'])
+    axes1[1].plot    (t_arr, spin_arr, color=color, lw=1.5)
+    axes1[2].semilogy(t_arr, Edd_arr,  color=color, lw=1.0)
 
-    axes[0].semilogy(t_arr, M_arr,    color=color, lw=1.5, label=tgt['label'])
-    axes[1].plot    (t_arr, spin_arr, color=color, lw=1.5)
-    axes[2].semilogy(t_arr, Edd_arr,  color=color, lw=1.0)
+decorate_axes(axes1)
+out1 = os.path.join(os.path.dirname(__file__), 'bh_history')
+fig1.savefig(out1 + '.pdf', bbox_inches='tight', dpi=150)
+fig1.savefig(out1 + '.png', bbox_inches='tight', dpi=150)
+print(f"Saved bh_history.pdf and bh_history.png")
 
-# Panel 1: BH mass
-axes[0].set_ylabel(r'$M_\bullet\ [M_\odot]$', fontsize=12)
-axes[0].set_ylim(1e4, 1e11)
-axes[0].legend(fontsize=9, loc='upper left', ncol=2)
-axes[0].yaxis.set_major_formatter(ticker.LogFormatterMathtext())
+# ---------------------------------------------------------------------------
+# Plot 2: massive sample only  (bh_history_sample.pdf/png)
+# ---------------------------------------------------------------------------
+fig2, axes2 = plt.subplots(3, 1, figsize=(10, 9), sharex=True)
+fig2.subplots_adjust(hspace=0.05)
 
-# Panel 2: spin
-axes[1].axhline(0, color='k', lw=0.6, ls=':')
-axes[1].set_ylabel(r'$a_\bullet$', fontsize=12)
-axes[1].set_ylim(-1.05, 1.05)
+sample_cmap = plt.get_cmap('plasma')
+sample_entries = [(hist, tgt) for hist, tgt in zip(histories, targets)
+                  if tgt['sample'] and hist]
+for k, (hist, tgt) in enumerate(sample_entries):
+    t_arr    = np.array([h['t']    for h in hist])
+    M_arr    = np.array([h['M_BH'] for h in hist])
+    spin_arr = np.array([h['spin'] for h in hist])
+    Edd_arr  = np.where(np.array([h['Edd'] for h in hist]) > 0,
+                        np.array([h['Edd'] for h in hist]), np.nan)
+    frac  = k / max(len(sample_entries) - 1, 1)
+    color = sample_cmap(0.15 + 0.7 * frac)
+    M_z0  = M_arr[-1]
+    label = rf'$\log M_\bullet={np.log10(M_z0):.2f}$'
+    axes2[0].semilogy(t_arr, M_arr,    color=color, lw=1.5, label=label)
+    axes2[1].plot    (t_arr, spin_arr, color=color, lw=1.5)
+    axes2[2].semilogy(t_arr, Edd_arr,  color=color, lw=1.0)
 
-# Panel 3: Eddington ratio
-axes[2].axhspan(0.3 * fEdd_ADAF, fEdd_ADAF, color='black', alpha=0.4, zorder=0,
-                label='ADAF transition')
-axes[2].set_ylabel(r'$\dot{m}$', fontsize=12)
-axes[2].set_xlabel(r'$t_{\rm ABB}\ [\rm Gyr]$', fontsize=12)
-axes[2].set_ylim(1e-6, 1e2)
+decorate_axes(axes2)
+out2 = os.path.join(os.path.dirname(__file__), 'bh_history_sample')
+fig2.savefig(out2 + '.pdf', bbox_inches='tight', dpi=150)
+fig2.savefig(out2 + '.png', bbox_inches='tight', dpi=150)
+print(f"Saved bh_history_sample.pdf and bh_history_sample.png")
 
-# Shared redshift axis on top
-ax_top  = axes[0].twiny()
-z_ticks = [10, 6, 4, 2, 1, 0.5, 0]
-t_ticks = [age_gyr(1.0 / (1 + z)) if z < 100 else ages_gyr[0] for z in z_ticks]
-ax_top.set_xlim(axes[0].get_xlim())
-ax_top.set_xticks(t_ticks)
-ax_top.set_xticklabels([str(z) for z in z_ticks])
-ax_top.set_xlabel('z', fontsize=12)
-
-for ax in axes:
-    ax.set_xlim(ages_gyr[0], ages_gyr[-1])
-
-out_base = os.path.join(os.path.dirname(__file__), 'bh_history')
-plt.savefig(out_base + '.pdf', bbox_inches='tight', dpi=150)
-plt.savefig(out_base + '.png', bbox_inches='tight', dpi=150)
-print(f"\nSaved bh_history.pdf and bh_history.png")
 plt.show()
