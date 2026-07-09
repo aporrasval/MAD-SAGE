@@ -49,9 +49,9 @@ def count_jobs(job_name):
     lines_with_jobname = [l for l in out.splitlines() if job_name in l]
     return len(lines_with_jobname)
 
-def _exec_shark(msg, cmdline):
+def _exec_shark(msg, cmdline, cwd=None):
     logger.info('%s with command line: %s', msg, subprocess.list2cmdline(cmdline))
-    out, err, code = common.exec_command(cmdline)
+    out, err, code = common.exec_command(cmdline, cwd=cwd)
     if code != 0:
         logger.error('Error while executing %s (exit code %d):\n' +
                      'stdout:\n%s\nstderr:\n%s', cmdline[0], code,
@@ -175,15 +175,14 @@ def run_darksage(particle, *args):
     
     # create/clear directory for temporary Dark Sage output
     spid = str(multiprocessing.current_process().pid)
-#    modeldir = '/Users/adam/DarkSage/autocalibration/DS_output_'+spid+'/'
-    modeldir = '/home/ajp79/palmer_scratch/runGUREFT90/DarkSage-astevens-disc/autocalibration/01/DS_output_' + spid + '/'
+    _autocalib_dir = os.path.normpath(os.path.abspath(os.path.dirname(__file__)))
+    modeldir = os.path.join(_autocalib_dir, 'DS_output_' + spid) + '/'
     if not os.path.exists(modeldir): os.makedirs(modeldir)
-    if os.path.isfile(modeldir+'model_z5.897_0'): subprocess.call(['rm', modeldir+'model*'])
+    if os.path.isfile(modeldir + 'model_z0.000_0'): subprocess.call(['rm', modeldir + 'model*'])
 
     # copy template parameter file and edit accordingly
     slash = len(opts.config) - opts.config[::-1].find('/') - 1
-#    temp_filename = '/Users/adam/DarkSage/autocalibration/' + opts.config[slash+1:-4] + '_' + spid + '_temp.par'
-    temp_filename = '/home/ajp79/palmer_scratch/runGUREFT90/DarkSage-astevens-disc/autocalibration/01/' + opts.config[slash+1:-4] + '_' + spid + '_temp.par'
+    temp_filename = os.path.join(_autocalib_dir, opts.config[slash+1:-4] + '_' + spid + '_temp.par')
     #
     f = open(opts.config).readlines()
     s = open(temp_filename, 'w')
@@ -204,8 +203,9 @@ def run_darksage(particle, *args):
     # currently assuming that serial in parallel here is the best
     print(temp_filename)
 #    cmdline = ['mpirun', '-np', '8', opts.shark_binary, temp_filename]
+    repo_root = os.path.normpath(os.path.join(_autocalib_dir, '..'))
     cmdline = [opts.shark_binary, temp_filename]
-    _exec_shark('Executing Dark Sage instance', cmdline)
+    _exec_shark('Executing Dark Sage instance', cmdline, cwd=repo_root)
 
     # changed to now take the weighted sum of logs of the (summed) reduced chi^2 of each constraint
     total = 10**sum(np.log10(np.sum(_evaluate(c, statTest, modeldir, subvols))*c.weight) for c in opts.constraints)

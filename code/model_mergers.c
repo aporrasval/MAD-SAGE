@@ -180,7 +180,7 @@ void quasar_mode_wind(int p, float BHaccrete)
     if(SpinEvolutionOn == 0)
         quasar_energy = RadiativeEfficiency * BHaccrete * sqr(C / UnitVelocity_in_cm_per_s);
     else if(SpinEvolutionOn > 0)
-        quasar_energy = EpsilonQ * Gal[p].BH_thindiskRadiativeEfficiency * BHaccrete * sqr(C / UnitVelocity_in_cm_per_s);
+        quasar_energy = EpsilonQ * Gal[p].BH_RadiativeEfficiency * BHaccrete * sqr(C / UnitVelocity_in_cm_per_s);
 
     Gal[p].QuasarEnergy = quasar_energy;
     // specific energy of hot and ejected reservoirs
@@ -732,17 +732,18 @@ void add_galaxies_together(int t, int p, int centralgal, int k_now, double mass_
   Gal[t].HotGas += Gal[p].HotGas;
   Gal[t].MetalsHotGas += Gal[p].MetalsHotGas;
   Gal[t].BlackHoleMass += Gal[p].BlackHoleMass;
+  Gal[t].MergerBlackHoleMass += Gal[p].BlackHoleMass;
   assert(Gal[t].BlackHoleMass>=0.0);
   
   /*Add BH-BH merger spin*/
-  // if (SpinEvolutionOn > 0) {
-  //   double theta1 = acos(1.0 - 2.0*drand48()) * (drand48() > 0.5 ? 1.0 : -1.0);
-  //   double theta2 = acos(1.0 - 2.0*drand48()) * (drand48() > 0.5 ? 1.0 : -1.0);
-  //   double phi1 = 2.0 * M_PI * drand48();
-  //   double phi2 = 2.0 * M_PI * drand48();
-  //   Gal[t].BlackHoleSpin = calculate_merger_spin_aligned(Gal[t].PrimaryBHMass, Gal[t].PrimaryBHSpin, 
-  //     Gal[t].SecondaryBHMass, Gal[t].SecondaryBHSpin, theta1, theta2, phi1, phi2); 
-  // }
+  if (SpinEvolutionOn > 0) {
+     double theta1 = acos(1.0 - 2.0*drand48()) * (drand48() > 0.5 ? 1.0 : -1.0);
+     double theta2 = acos(1.0 - 2.0*drand48()) * (drand48() > 0.5 ? 1.0 : -1.0);
+     double phi1 = 2.0 * M_PI * drand48();
+     double phi2 = 2.0 * M_PI * drand48();
+     Gal[t].BlackHoleSpin = calculate_merger_spin_aligned(Gal[t].PrimaryBHMass, Gal[t].PrimaryBHSpin, 
+     Gal[t].SecondaryBHMass, Gal[t].SecondaryBHSpin, theta1, theta2, phi1, phi2); 
+  }
 
   for(step = 0; step < STEPS; step++)
   {
@@ -869,8 +870,10 @@ void disrupt_satellite_to_ICS(int centralgal, int gal, int k_now)
 
         if(Gal[gal].ColdGas + Gal[gal].HotGas + Gal[gal].EjectedMass > 0.0)
         {
+            double sat_metals = Gal[gal].MetalsColdGas + Gal[gal].MetalsHotGas + Gal[gal].MetalsEjectedMass;
+            if(sat_metals < 0.0) sat_metals = 0.0;
             Gal[centralgal].LocalIGM += (Gal[gal].ColdGas + Gal[gal].HotGas + Gal[gal].EjectedMass);
-            Gal[centralgal].MetalsLocalIGM += (Gal[gal].MetalsColdGas + Gal[gal].MetalsHotGas + Gal[gal].MetalsEjectedMass);
+            Gal[centralgal].MetalsLocalIGM += sat_metals;
         }
 
         if(!(Gal[centralgal].MetalsLocalIGS >= 0 && Gal[centralgal].MetalsLocalIGS != INFINITY)) printf("Gal[centralgal].LocalIGS, Gal[centralgal].MetalsLocalIGS = %e, %e\n", Gal[centralgal].LocalIGS, Gal[centralgal].MetalsLocalIGS);

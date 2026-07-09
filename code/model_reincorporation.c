@@ -73,7 +73,8 @@ void reincorporate_gas(int p, int centralgal, double dt)
             Gal[p].MetalsFountainGas += (Gal[p].MetalsEjectedMass * move_factor);
             Gal[p].EjectedMass -= (Gal[p].EjectedMass * move_factor);
             Gal[p].MetalsEjectedMass -= (Gal[p].MetalsEjectedMass * move_factor);
-            
+            if(Gal[p].MetalsEjectedMass < 0.0) Gal[p].MetalsEjectedMass = 0.0;
+
             if(!(Gal[p].EjectedMass >= Gal[p].MetalsEjectedMass))
             {
                 printf("Gal[p].EjectedMass, Gal[p].MetalsEjectedMass = %e, %e\n", Gal[p].EjectedMass, Gal[p].MetalsEjectedMass);

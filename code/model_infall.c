@@ -269,7 +269,6 @@ double strip_from_satellite(int halonr, int centralgal, int gal, double max_stri
   
     if(strippedGas > Gal[gal].HotGas) strippedGas = Gal[gal].HotGas;
     if(strippedGasMetals > Gal[gal].MetalsHotGas) strippedGasMetals = Gal[gal].MetalsHotGas;
-
     if(strippedGas>0 && HotStripOn==1)
     {
 

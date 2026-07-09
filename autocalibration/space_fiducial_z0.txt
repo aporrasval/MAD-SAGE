@@ -1,0 +1,2 @@
+GasSinkRate,fmove,1,0.01,0.999
+EnergySN,eSN,1,5e49,3e51

@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 import sys
 import os
 
-def galdtype_darksage(Nannuli=30,Nage=30):
+def galdtype_darksage(Nannuli=30, Nage=30):
     floattype = np.float32
-    
+
     # Account for whether age bins are used for stars or not
     if Nage>1:
         disc_arr_dim = (Nannuli,Nage)
@@ -58,8 +58,10 @@ def galdtype_darksage(Nannuli=30,Nage=30):
                     ('BH_Magnetization'             , floattype),  
                     ('BH_JetPower'                  , floattype), 
                     ('BH_JetEfficiency'                     , floattype),
-                    ('BH_thindiskRadiativeEfficiency'       , floattype),                       
+                    ('BH_RadiativeEfficiency'       , floattype),                       
                     ('Eddrate'                      , floattype),
+                    ('RadioEddrate'                 , floattype),
+                    ('InstaEddrate'                 , floattype),
                     ('PrimaryBHMass'                      , floattype),
                     ('SecondaryBHMass'                      , floattype),
                     ('PrimaryBHSpin'                      , floattype),
@@ -117,13 +119,14 @@ def galdtype_darksage(Nannuli=30,Nage=30):
                     ('QuasarEnergy'                      , floattype),
                     ('AGNheating'                      , floattype),
                     ('AGNfountain'                      , floattype),  
-                    ('CurrentRadioBlackHoleMass'                      , floattype),  
+                    ('DeltaBlackHoleMass'                     , floattype),
                     ('BHaccreted'                      , floattype),
                     ('BondiBHaccreted'                      , floattype),
                     ('RadioBHaccreted'                      , floattype),
-                    ('InstaBHaccreted'                      , floattype),                    
+                    ('InstaBHaccreted'                      , floattype),
                     ('RadioBlackHoleMass'                      , floattype),
                     ('InstaBlackHoleMass'                      , floattype),
+                    ('MergerBlackHoleMass'                     , floattype),
                     ('Lbol'                      , floattype),
                     ('LastMajorMerger'              , floattype),
                     ('LastMinorMerger'              , floattype),

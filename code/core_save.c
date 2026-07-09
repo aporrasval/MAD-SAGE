@@ -309,8 +309,10 @@ void prepare_galaxy_for_output(int filenr, int tree, struct GALAXY *g, struct GA
   o->BH_Magnetization = g->BH_Magnetization;   
   o->BH_JetPower = g->BH_JetPower; 
   o->BH_JetEfficiency = g->BH_JetEfficiency; 
-  o->BH_thindiskRadiativeEfficiency = g->BH_thindiskRadiativeEfficiency; 
-  o->Eddrate = g->Eddrate;           
+  o->BH_RadiativeEfficiency = g->BH_RadiativeEfficiency; 
+  o->Eddrate = g->Eddrate;
+  o->RadioEddrate = g->RadioEddrate;
+  o->InstaEddrate = g->InstaEddrate;
   o->PrimaryBHMass = g->PrimaryBHMass;
   o->SecondaryBHMass = g->SecondaryBHMass;
   o->PrimaryBHSpin = g->PrimaryBHSpin;
@@ -414,6 +416,7 @@ void prepare_galaxy_for_output(int filenr, int tree, struct GALAXY *g, struct GA
 
   o->RadioBlackHoleMass = g->RadioBlackHoleMass;
   o->InstaBlackHoleMass = g->InstaBlackHoleMass;
+  o->MergerBlackHoleMass = g->MergerBlackHoleMass;
   o->Lbol = log10(g->Lbol);
 
   o->LastMajorMerger = g->LastMajorMerger * UnitTime_in_Megayears;
@@ -534,9 +537,15 @@ void prepare_galaxy_for_output_large(int filenr, int tree, struct GALAXY *g, str
   o->BH_Magnetization = g->BH_Magnetization;   
   o->BH_JetPower = g->BH_JetPower; 
   o->BH_JetEfficiency = g->BH_JetEfficiency; 
-  o->BH_thindiskRadiativeEfficiency = g->BH_thindiskRadiativeEfficiency;   
+  o->BH_RadiativeEfficiency = g->BH_RadiativeEfficiency;
   o->Eddrate = g->Eddrate;
-  
+  o->RadioEddrate = g->RadioEddrate;
+  o->InstaEddrate = g->InstaEddrate;
+  o->PrimaryBHMass   = g->PrimaryBHMass;
+  o->SecondaryBHMass = g->SecondaryBHMass;
+  o->PrimaryBHSpin   = g->PrimaryBHSpin;
+  o->SecondaryBHSpin = g->SecondaryBHSpin;
+
   o->VelDispMergerBulge = g->VelDispMergerBulge;
 
   o->MetalsColdGas = g->MetalsColdGas;
@@ -652,6 +661,7 @@ void prepare_galaxy_for_output_large(int filenr, int tree, struct GALAXY *g, str
 
   o->RadioBlackHoleMass = g->RadioBlackHoleMass;
   o->InstaBlackHoleMass = g->InstaBlackHoleMass;
+  o->MergerBlackHoleMass = g->MergerBlackHoleMass;
   o->Lbol = log10(g->Lbol);
 
   o->LastMajorMerger = g->LastMajorMerger * UnitTime_in_Megayears;

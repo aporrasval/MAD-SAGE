@@ -93,8 +93,10 @@ struct GALAXY_OUTPUT
   float BH_Magnetization;    
   float BH_JetPower;
   float BH_JetEfficiency;
-  float BH_thindiskRadiativeEfficiency;
-  float Eddrate;         
+  float BH_RadiativeEfficiency;
+  float Eddrate;
+  float RadioEddrate;    // supply-based Eddington ratio for radio (hot-gas) channel
+  float InstaEddrate;    // supply-based Eddington ratio for instability channel
   float PrimaryBHMass;
   float SecondaryBHMass;
   float PrimaryBHSpin;
@@ -162,6 +164,7 @@ struct GALAXY_OUTPUT
   float InstaBHaccreted;
   float RadioBlackHoleMass;
   float InstaBlackHoleMass;
+  float MergerBlackHoleMass;
   float Lbol;
 
   float LastMajorMerger;
@@ -229,8 +232,10 @@ struct GALAXY_OUTPUT_LARGE // new for age dimension
   float BH_Magnetization;     
   float BH_JetPower;  
   float BH_JetEfficiency;
-  float BH_thindiskRadiativeEfficiency;
-  float Eddrate;        
+  float BH_RadiativeEfficiency;
+  float Eddrate;
+  float RadioEddrate;    // supply-based Eddington ratio for radio (hot-gas) channel
+  float InstaEddrate;    // supply-based Eddington ratio for instability channel
   float PrimaryBHMass;
   float SecondaryBHMass;
   float PrimaryBHSpin;
@@ -302,6 +307,7 @@ struct GALAXY_OUTPUT_LARGE // new for age dimension
   float InstaBHaccreted;
   float RadioBlackHoleMass;
   float InstaBlackHoleMass;
+  float MergerBlackHoleMass;
   float Lbol;
 
   float LastMajorMerger;
@@ -381,8 +387,10 @@ struct GALAXY
   double BH_Magnetization;     
   double BH_JetPower;  
   double BH_JetEfficiency;
-  double BH_thindiskRadiativeEfficiency;
-  double Eddrate;        
+  double BH_RadiativeEfficiency;
+  double Eddrate;
+  double RadioEddrate;   // supply-based Eddington ratio for radio (hot-gas) channel
+  double InstaEddrate;   // supply-based Eddington ratio for instability channel
   double PrimaryBHMass;
   double SecondaryBHMass;
   double PrimaryBHSpin;
@@ -480,6 +488,7 @@ struct GALAXY
   double InstaBHaccreted;
   double RadioBlackHoleMass;
   double InstaBlackHoleMass;
+  double MergerBlackHoleMass;
   double Lbol;
 
   double MaxRadioModeAccretionRate;

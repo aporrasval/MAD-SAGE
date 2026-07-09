@@ -96,8 +96,10 @@ void init_galaxy(int p, int halonr)
     Gal[p].BH_Magnetization = 0.0; 
     Gal[p].BH_JetPower = 0.0;
     Gal[p].BH_JetEfficiency = 0.0;
-    Gal[p].BH_thindiskRadiativeEfficiency = 0.0;
-    Gal[p].Eddrate = 0.0;     
+    Gal[p].BH_RadiativeEfficiency = 0.0;
+    Gal[p].Eddrate = 0.0;
+    Gal[p].RadioEddrate = 0.0;
+    Gal[p].InstaEddrate = 0.0;
     Gal[p].PrimaryBHMass = 0.0;
     Gal[p].SecondaryBHMass = 0.0;
     Gal[p].PrimaryBHSpin = SpinSeedValue;
@@ -194,6 +196,7 @@ void init_galaxy(int p, int halonr)
     Gal[p].InstaBHaccreted = 0.0;
     Gal[p].RadioBlackHoleMass = 0.0;
     Gal[p].InstaBlackHoleMass = 0.0;
+    Gal[p].MergerBlackHoleMass = 0.0;
     Gal[p].Lbol = 0.0;
 
     Gal[p].MaxRadioModeAccretionRate = 0.0;

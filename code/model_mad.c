@@ -463,7 +463,8 @@ double integrate_spin_RK45(double *mass_ptr, double initial_spin, double initial
                                                   mad_superEddington, mad_subEddington) * substep;
                 acc_magnetization += calcMagnetization(spin, r_Edd_step) * substep;
                 acc_etaEM         += etaEM(spin, r_Edd_step)             * substep;
-                acc_radiative_eff += radiativeEfficiencyThin(spin)        * substep;
+                // acc_radiative_eff += radiativeEfficiencyThin(spin)        * substep;
+                acc_radiative_eff += radiativeEfficiency(spin, mdot_Edd_step) * substep;
                 acc_time          += substep;
 
             }
@@ -495,7 +496,8 @@ double integrate_spin_RK45(double *mass_ptr, double initial_spin, double initial
                                                    mad_superEddington, mad_subEddington);
         if(avg_magnetization) *avg_magnetization = calcMagnetization(spin, r_Edd_f);
         if(avg_etaEM)         *avg_etaEM         = etaEM(spin, r_Edd_f);
-        if(avg_radiative_eff) *avg_radiative_eff = radiativeEfficiencyThin(spin);
+        // if(avg_radiative_eff) *avg_radiative_eff = radiativeEfficiencyThin(spin);
+        if(avg_radiative_eff) *avg_radiative_eff = radiativeEfficiency(spin, mdot_f);
     }
 
     // Return number of substeps taken
@@ -572,8 +574,7 @@ void update_black_hole_spin(int p, double accreted_mass, double dt, int coherent
     Gal[p].BH_Magnetization = magnetization;
     Gal[p].BH_JetPower = jet_power;
     Gal[p].BH_JetEfficiency = jet_efficiency;
-    Gal[p].BH_thindiskRadiativeEfficiency = radiative_eff;
-
+    Gal[p].BH_RadiativeEfficiency = radiative_eff;
 }
 
 void update_black_hole_spin_coherent(int p, double accreted_mass, double dt) {
@@ -618,9 +619,12 @@ double evolve_black_hole(int p, double dt)
 
     if(total_supply <= 0.0)
     {
-        // Nothing to accrete this sub-step.  Zero the staging field so that
-        // InstaBlackHoleMass is not inflated by a stale value from a previous sub-step.
+        // Nothing to accrete this sub-step.  Zero all rate/ratio fields so that stale
+        // values from a previous sub-step are not carried forward to the output.
         Gal[p].DeltaBlackHoleMass = 0.0;
+        Gal[p].Eddrate            = 0.0;
+        Gal[p].RadioEddrate       = 0.0;
+        Gal[p].InstaEddrate       = 0.0;
         return 0.0;
     }
 
@@ -634,9 +638,15 @@ double evolve_black_hole(int p, double dt)
         // Single unified spin update using the combined supply from both channels.
         // Coherent (disc-aligned) accretion applies when the instability supply dominates;
         // incoherent (random-orientation) accretion applies when the hot-gas supply dominates.
-        // int coherent = (instab_supply >= radio_supply) ? 1 : 0;
-        int coherent = 1;
+        int coherent = (instab_supply >= radio_supply) ? 1 : 0;
+        // int coherent = 1;
         update_black_hole_spin(p, total_supply, dt, coherent, 1.0, 1, 1);
+
+        // update_black_hole_spin() sets Gal[p].Eddrate to the current sub-step's supply-based
+        // Eddington ratio.  Decompose it into radio and instability channels now that Eddrate
+        // is current.  Their sum equals Eddrate exactly.
+        Gal[p].RadioEddrate = Gal[p].Eddrate * radio_fraction;
+        Gal[p].InstaEddrate = Gal[p].Eddrate * (1.0 - radio_fraction);
 
         // update_black_hole_spin() has updated BlackHoleMass and set DeltaBlackHoleMass to
         // the total net increment (after radiative + jet losses) from both channels combined.
@@ -648,7 +658,7 @@ double evolve_black_hole(int p, double dt)
         double instab_net = total_net - radio_net;
 
         Gal[p].RadioBlackHoleMass += radio_net;
-        Gal[p].RadioBHaccreted     = radio_net / dt;
+        Gal[p].RadioBHaccreted    += radio_net;   // accumulate net mass; divided by deltaT post-loop
         if(radio_net / dt > Gal[p].MaxRadioModeAccretionRate)
             Gal[p].MaxRadioModeAccretionRate = radio_net / dt;
 
@@ -662,13 +672,24 @@ double evolve_black_hole(int p, double dt)
     {
         // SpinEvolutionOn == 0: simple fixed-efficiency accretion, no spin physics.
 
+        // Compute supply-based Eddington ratio (same formula as update_black_hole_spin uses)
+        // before any mass updates so that the BH mass is the pre-accretion value.
+        double mass_msun_0 = Gal[p].BlackHoleMass * 1e10 / Hubble_h;
+        double mdot_edd_0  = calcEddingtonAccretionRateFiducial(mass_msun_0);
+        double mdot_act_0  = (total_supply * 1e10 / Hubble_h) / (dt * UnitTime_in_s / SEC_PER_YEAR);
+        double eddrate_0   = (mdot_edd_0 > 0.0) ? mdot_act_0 / mdot_edd_0 : 0.0;
+        if(eddrate_0 > 1000.0) eddrate_0 = 1000.0;
+        Gal[p].Eddrate      = eddrate_0;
+        Gal[p].RadioEddrate = eddrate_0 * radio_fraction;
+        Gal[p].InstaEddrate = eddrate_0 * (1.0 - radio_fraction);
+
         // Radio-mode: apply the global RadiativeEfficiency to get the net BH mass gain.
         // (The accreted supply was already removed from HotGas in cooling_recipe_part_a.)
         radio_net = (1.0 - RadiativeEfficiency) * radio_supply;
         Gal[p].BlackHoleMass   += radio_net;
         Gal[p].BondiBHaccreted  = radio_net / dt;  // Bondi-style radio-mode accretion rate
         Gal[p].RadioBlackHoleMass += radio_net;
-        Gal[p].RadioBHaccreted  = radio_net / dt;
+        Gal[p].RadioBHaccreted   += radio_net;    // accumulate net mass; divided by deltaT post-loop
         if(radio_net / dt > Gal[p].MaxRadioModeAccretionRate)
             Gal[p].MaxRadioModeAccretionRate = radio_net / dt;
 

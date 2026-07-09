@@ -66,8 +66,8 @@ qlfbins = mbins_qlf + dm_qlf/2.0
 Nmin = 5 # minimum number of galaxies expected in a mass bin for the simulation volume, based on observations, to warrant fitting to that bin for mass functions
 
 # Manually set information for the simulation
-sim = 1
-files = range(32)
+sim = 3
+files = range(8)
 if sim==0: # TNG300
     h0 = 0.6774
     Omega0 = 0.3089
@@ -83,11 +83,15 @@ elif sim==2: # TNG100-1 simulation
     Omega0 = 0.3089
     vol = (110.7/h0)**3 #* (1.0*len(files)/8.)
     age_alist_file = '/home/ajp79/project/merger_trees/TNG100-1-Dark/illustristng.a_list'
+elif sim==3: # Mini-Millennium
+    h0 = 0.73
+    Omega0 = 0.25
+    vol = (62.5/h0)**3  # (Mpc/h)^3
+    age_alist_file = '/Users/porrasaj/Documents/Astronomy_research/DarkSAGE/running_test_minimillennium/mini_millennium/millennium.a_list'
 else:
     h0 = 0.6774
     Omega0 = 0.3089
-    vol = (62.5/h0)**3 # assumin the right number of files have been hard-coded above
-    #age_alist_file = '/Users/adam/MTNG_trees/MTNG_alist.txt'
+    vol = (62.5/h0)**3
     age_alist_file = '/home/ajp79/project/fs1/DarkSage/2024DarkSage/miniMTNG_trees/MTNG_alist.txt'
 
 # These are two easily create variables of these different shapes without
@@ -373,6 +377,51 @@ class CSFRDH(Constraint):
 _constraint_re = re.compile((r'([0-9_a-zA-Z]+)' # name
                               '(?:\\(([0-9\.]+)-([0-9\.]+)\))?' # domain boundaries
                               '(?:\\*([0-9\.]+))?')) # weight
+class SMF_z0(SMF):
+    """SMF constraint at z=0, compared against Driver+2022 (GAMA)"""
+
+    domain = (9.0, 12.0)
+
+    def _load_model_data(self, modeldir, subvols):
+        import glob
+        files_z0 = sorted(glob.glob(modeldir + 'model_z0.000_*'))
+        parts = []
+        for f in files_z0:
+            if os.path.getsize(f) == 0:
+                continue
+            g = r.darksage_out_single(f, Nannuli=30, Nage=30)
+            if g is not None and len(g) > 0:
+                parts.append(g['StellarMass'])
+
+        hist_smf = np.full((1, len(mbins)-1), -20.0)  # len(mbins)-1 to match np.histogram output (N bins = N+1 edges)
+        if not parts:
+            return h0, Omega0, hist_smf, zeros6()
+
+        stellar = np.concatenate(parts) * 1e10 / h0   # Msun
+        logSM = np.where(stellar > 0, np.log10(np.maximum(stellar, 1e-30)), -20.0)
+        logSM[~np.isfinite(logSM)] = -20.0
+
+        counts, _ = np.histogram(logSM, bins=mbins)
+        phi = counts / (dm * vol)
+        ind = phi > 0
+        hist_smf[0, ind] = np.log10(phi[ind])
+
+        return h0, Omega0, hist_smf, zeros6()
+
+    def get_obs_x_y_err(self):
+        # Driver+2022 (GAMA), h=0.7; log10(Phi) in Mpc^{-3} dex^{-1}
+        logTSM, logPhi, uncert = self.load_observation('GAMA_SMF_highres.csv', cols=[0, 1, 2])
+        # h-correction on masses: Driver uses h=0.7, simulation uses h=0.73
+        logTSM = logTSM + 2 * np.log10(0.7 / h0)
+        filt = (logTSM >= self.domain[0]) & (logTSM <= self.domain[1])
+        return logTSM[filt], logPhi[filt], uncert[filt], uncert[filt]
+
+    def get_model_x_y(self, hist_smf, _):
+        y = hist_smf[0, :]
+        ind = np.where(y < 0.)
+        return xmf[ind], y[ind]
+
+
 def parse(spec):
     """Parses a comma-separated string of constraint names into a list of
     Constraint objects. Specific domain values can be specified in `spec`"""
@@ -380,6 +429,7 @@ def parse(spec):
     _constraints = {
         'QLF_z6': QLF_z6,
         'SMF_z6': SMF_z6,
+        'SMF_z0': SMF_z0,
     }
 
     def _parse(s):

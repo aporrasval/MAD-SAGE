@@ -1,5 +1,6 @@
 # Adam Stevens, 2022
 # Post-analysis of output of PSO with Dark Sage to check fidelity etc
+# Updated for local use: reads dump_file from --dump argument, no galprops dependency
 
 import matplotlib
 matplotlib.use('Agg')
@@ -7,55 +8,85 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import sys
-sys.path.insert(0, '/home/ajp79/project/fs1/DarkSage/2024DarkSage/Dirty-AstroPy')
-from galprops import galread as gr
-from galprops import galcalc as gc
-from galprops import galplot as gp
+import argparse
 
 import warnings
 warnings.filterwarnings("ignore")
 
 fsize = 20
-matplotlib.rcParams.update({'font.size': fsize, 'xtick.major.size': 10, 'ytick.major.size': 10, 'xtick.major.width': 1, 'ytick.major.width': 1, 'ytick.minor.size': 5, 'xtick.minor.size': 5, 'xtick.direction': 'in', 'ytick.direction': 'in', 'axes.linewidth': 1, 'text.usetex': True, 'font.family': 'serif', 'font.serif': 'Times New Roman', 'legend.numpoints': 1, 'legend.columnspacing': 1, 'legend.fontsize': fsize-4, 'lines.markeredgewidth': 1.0, 'errorbar.capsize': 4.0, 'xtick.top': True, 'ytick.right': True})
+matplotlib.rcParams.update({
+    'font.size': fsize, 'xtick.major.size': 10, 'ytick.major.size': 10,
+    'xtick.major.width': 1, 'ytick.major.width': 1,
+    'ytick.minor.size': 5, 'xtick.minor.size': 5,
+    'xtick.direction': 'in', 'ytick.direction': 'in',
+    'axes.linewidth': 1, 'font.family': 'serif',
+    'legend.numpoints': 1, 'legend.columnspacing': 1,
+    'legend.fontsize': fsize - 4, 'lines.markeredgewidth': 1.0,
+    'errorbar.capsize': 4.0, 'xtick.top': True, 'ytick.right': True
+})
 
-base_dir = '/home/ajp79/project/fs1/DarkSage/priya_proj/runGUREFT90/DarkSage-astevens-disc/autocalibration/01/'
-track_dir = base_dir + 'tracks/'
-dump_file = base_dir + 'full_dump.txt'
+parser = argparse.ArgumentParser()
+parser.add_argument('-d', '--dump', required=True, help='Path to full_dump.txt (stdout from PSO run)')
+parser.add_argument('-t', '--tracks-dir', required=True, help='Path to PSO tracks directory')
+parser.add_argument('-S', '--space-file', required=True, help='Space file used for the PSO run')
+opts = parser.parse_args()
 
-# lists that will contain the x and y data for the observations and Dark Sage runs that were used to compute the goodness of fit
+base_dir   = os.path.dirname(opts.dump) + '/'
+track_dir  = opts.tracks_dir
+dump_file  = opts.dump
+
+# Load space to know parameter names
+sys.path.insert(0, os.path.normpath(os.path.join(__file__, '..', '..', 'output')))
+import analysis
+space       = analysis.load_space(opts.space_file)
+param_names = [n for n in space['name']]
+
+# ---- Find best-fit from track files ----------------------------------------
+import glob
+fx_files  = sorted(glob.glob(os.path.join(track_dir, 'track_*_fx.npy')))
+pos_files = sorted(glob.glob(os.path.join(track_dir, 'track_*_pos.npy')))
+
+if not fx_files:
+    sys.exit('No track files found in %s' % track_dir)
+
+all_fx  = np.concatenate([np.load(f) for f in fx_files])
+all_pos = np.vstack([np.load(f) for f in pos_files])
+
+valid    = np.isfinite(all_fx)
+best_idx = np.argmin(all_fx[valid])
+best_fx  = all_fx[valid][best_idx]
+best_pos = all_pos[valid][best_idx]
+
+print('\n=== Best-fit parameters ===')
+for name, val in zip(param_names, best_pos):
+    print('  %-20s = %g' % (name, val))
+print('  chi2              = %.6f' % best_fx)
+
+# ---- Parse dump file for obs/model data ------------------------------------
 SMF_x_obs, SMF_y_obs, SMF_y_mod = [], [], []
-QLF_x_obs, QLF_y_obs, QLF_y_mod = [], [], []
-
-# HIMF_x_obs, HIMF_y_obs, HIMF_y_mod = [], [], []
-# CSFH_x_obs, CSFH_y_obs, CSFH_y_mod = [], [], []
 
 f = open(dump_file, 'r')
 lines = f.readlines()
-on_a_data_line = False # tracks if the current line in the dump is data of interest
+on_a_data_line = False
 last_line = False
 obs = ''
 line_start = ''
 
 for l, line in enumerate(lines):
-#    print('doing line', l, on_a_data_line, last_line, obs, line_start)
 
-    # a line that specifies a data file tells us which constraint the next data belong to
-    if 'weibel24_SMFz6.csv' in line:
+    # identify which constraint the following data belong to
+    if 'GAMA_SMF_highres.csv' in line:
         obs = 'SMF'
-    elif 'JWST_QLFz6.csv' in line:
-        obs = 'QLF'
-    # elif 'CSFH_DSILVA+23_Ver_Final.csv' in line:
-    #     obs = 'CSFH'
-    
-    # catches an instance where an array of data we want starts
-    if line[:5]=='obs x' or line[:5]=='obs y' or line[:5]=='mod y': 
+
+    # catch the start of a printed data array
+    if line[:5] == 'obs x' or line[:5] == 'obs y' or line[:5] == 'mod y':
         line_start = line[:5]
         on_a_data_line = True
         line = line[8:]
-        data = np.array([], dtype=np.float32) # start appending data into an array
-        
+        data = np.array([], dtype=np.float32)
+
     if on_a_data_line:
-        if line[-2:]==']\n':
+        if line[-2:] == ']\n':
             last_line = True
             line = line[:-2]
         else:
@@ -64,72 +95,42 @@ for l, line in enumerate(lines):
 
         line_data = np.array(line.split())
         data = np.append(data, line_data.astype(np.float32))
-            
+
         if last_line:
-            
             if obs == 'SMF' and line_start == 'obs x':
                 SMF_x_obs += [data]
             if obs == 'SMF' and line_start == 'obs y':
                 SMF_y_obs += [data]
             if obs == 'SMF' and line_start == 'mod y':
                 SMF_y_mod += [data]
-
-            if obs == 'QLF' and line_start == 'obs x':
-                QLF_x_obs += [data]
-            if obs == 'QLF' and line_start == 'obs y':
-                QLF_y_obs += [data]
-            if obs == 'QLF' and line_start == 'mod y':
-                QLF_y_mod += [data]
-
-            # if obs == 'CSFH' and line_start == 'obs x':
-            #     CSFH_x_obs += [data]
-            # if obs == 'CSFH' and line_start == 'obs y':
-            #     CSFH_y_obs += [data]
-            # if obs == 'CSFH' and line_start == 'mod y':
-            #     CSFH_y_mod += [data]
-            
             on_a_data_line = False
     else:
         last_line = False
 
+print('\nParsed %d SMF evaluations from dump file' % len(SMF_y_mod))
 
-print(len(SMF_x_obs), len(SMF_y_obs), len(SMF_y_mod))
-print(len(QLF_x_obs), len(QLF_y_obs), len(QLF_y_mod))
+if not SMF_y_mod:
+    print('No SMF data found in dump file. Check that stdout was fully captured.')
+    sys.exit(0)
 
-# print(len(HIMF_x_obs), len(HIMF_y_obs), len(HIMF_y_mod))
-# print(len(CSFH_x_obs), len(CSFH_y_obs), len(CSFH_y_mod))
+# ---- Plot ------------------------------------------------------------------
+fig, ax = plt.subplots(figsize=(6, 5))
 
-print("QLF Lbol: ", QLF_x_obs)
-print("QLF Phi: ", QLF_y_mod)
+ax.plot(SMF_x_obs[0], SMF_y_obs[0], 'ko', ms=4, label='Driver+2022 (GAMA)', zorder=5)
 
-fig, (ax1, ax2) = plt.subplots(1, 2, sharex=False, sharey=False)
-ax1.plot(SMF_x_obs[0], SMF_y_obs[0], 'ko')
-ax2.plot(QLF_x_obs[0], QLF_y_obs[0], 'ko')
+for i in range(len(SMF_y_mod)):
+    alpha = 0.3 if i < len(SMF_y_mod) - 1 else 1.0
+    lw    = 0.8 if i < len(SMF_y_mod) - 1 else 1.8
+    label = 'DarkSAGE (best fit)' if i == len(SMF_y_mod) - 1 else None
+    ax.plot(SMF_x_obs[i], SMF_y_mod[i], '-', alpha=alpha, lw=lw, color='steelblue', label=label)
 
-# ax2.plot(HIMF_x_obs[0], HIMF_y_obs[0], 'ko')
-# ax3.plot(CSFH_x_obs[0], CSFH_y_obs[0], 'ko')
+ax.set_xlim(9, 12.1)
+ax.set_ylim(-6, 0)
+ax.set_xlabel(r'$\log_{10}(m_*\;[\mathrm{M}_\odot])$', fontsize=fsize)
+ax.set_ylabel(r'$\log_{10}(\Phi_*\;[\mathrm{Mpc}^{-3}\,\mathrm{dex}^{-1}])$', fontsize=fsize)
+ax.legend()
 
-for i in range(np.min([len(SMF_x_obs), len(QLF_x_obs)])):
-    ax1.plot(SMF_x_obs[i], SMF_y_mod[i], '-')
-    ax2.plot(QLF_x_obs[i], QLF_y_mod[i], '-')
-
-    #print("QLF Lbol: ", QLF_x_obs[i])
-    #print("QLF Phi: ", QLF_y_mod[i])
-
-    # ax2.plot(HIMF_x_obs[i], HIMF_y_mod[i], '-')
-    # ax3.plot(CSFH_x_obs[i], CSFH_y_mod[i], '-')
-
-ax1.axis([7,11.1,-6,0.0])
-ax2.axis([43,48,-10,-2.0])
-# ax3.axis([0,14,-2.7,-0.5])
-
-ax1.set_xlabel(r'$\log_{10}(m_*~[{\rm M}_\odot])$')
-ax1.set_ylabel(r'$\log_{10}(\Phi_*~[{\rm cMpc}^{-3}\,{\rm dex}^{-1}])$')
-
-ax2.set_xlabel(r'$\log_{10}(L_{\rm bol}~[erg \ s^{-1}])$')
-ax2.set_ylabel(r'$\log_{10}(\Phi_{\rm HI}~[{\rm cMpc}^{-3}\,{\rm dex}^{-1}])$')
-
-# ax3.set_xlabel(r'Look-back time [Gyr]')
-# ax3.set_ylabel(r'$\log_{10}(\bar{\rho}_{\rm SFR}~[{\rm M}_\odot\,{\rm yr}^{-1}\,{\rm cMpc}^{-3}])$')
-
-gp.savepng(base_dir+'reconstructed_constraints', xpixplot=2000, ypixplot=500)
+plt.tight_layout()
+out = os.path.join(base_dir, 'reconstructed_SMF.pdf')
+plt.savefig(out, bbox_inches='tight')
+print('Plot saved to: %s' % out)

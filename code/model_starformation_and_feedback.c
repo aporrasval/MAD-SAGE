@@ -1316,18 +1316,24 @@ void delayed_feedback(int p, int k_now, double time, double dt)
         // and for local intergalactic stars
         if(Gal[p].LocalIGS_Age[k] > 0)
         {
+            double metallicity_IGS = get_metallicity(Gal[p].LocalIGS_Age[k], Gal[p].MetalsLocalIGS_Age[k]);
             return_mass = ReturnFraction[k] * Gal[p].LocalIGS_Age[k];
             return_metal_mass = ReturnFraction[k] * Gal[p].MetalsLocalIGS_Age[k];
-            
+
+            // Clamp return_metal_mass to avoid floating-point drift in MetalsLocalIGS_Age making it negative
+            if(return_metal_mass < 0.0) return_metal_mass = 0.0;
+
             Gal[p].LocalIGS_Age[k] -= return_mass;
             Gal[p].LocalIGS -= return_mass;
-            
+
             Gal[p].MetalsLocalIGS_Age[k] -= return_metal_mass;
+            if(Gal[p].MetalsLocalIGS_Age[k] < 0.0) Gal[p].MetalsLocalIGS_Age[k] = 0.0;
             Gal[p].MetalsLocalIGS -= return_metal_mass;
 
+            double delta_igm = return_metal_mass + (inv_FinalRecycleFraction * return_mass * Yield * (1-metallicity_IGS));
+            if(delta_igm < 0.0) delta_igm = 0.0;
             Gal[p].LocalIGM += return_mass;
-            Gal[p].MetalsLocalIGM += return_metal_mass;
-            Gal[p].MetalsLocalIGM += (inv_FinalRecycleFraction * return_mass * Yield * (1-metallicity));
+            Gal[p].MetalsLocalIGM += delta_igm;
         }
         
     }
