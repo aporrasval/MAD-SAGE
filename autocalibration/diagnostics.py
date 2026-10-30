@@ -184,9 +184,11 @@ def plot_pairplot(space, pos):
 def main():
 
     parser = argparse.ArgumentParser()
+    # Default matches main.py: space_BHspin.txt next to this file (was 'space.txt' in
+    # the current directory, inherited from the Shark PSO code, which does not exist here)
     parser.add_argument('-S', '--space-file',
-        help='File with the search space specification, defaults to space.txt',
-        default='space.txt')
+        help='File with the search space specification, defaults to space_BHspin.txt in the autocalibration directory',
+        default=os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'space_BHspin.txt')))
     parser.add_argument('tracks_dir')
     opts = parser.parse_args()
 

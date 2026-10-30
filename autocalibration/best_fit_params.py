@@ -16,8 +16,14 @@ import analysis
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-t', '--tracks-dir', required=True, help='Path to PSO tracks directory')
-    parser.add_argument('-S', '--space-file', required=True, help='Space file used for the PSO run')
+    # -S used to be required; it now defaults to space_BHspin.txt next to this file,
+    # the same default as main.py and diagnostics.py. Pass the space file of the run if it was different.
+    parser.add_argument('-S', '--space-file', help='Space file used for the PSO run (default: space_BHspin.txt in the autocalibration directory)',
+                        default=os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'space_BHspin.txt')))
     parser.add_argument('--plot', action='store_true', help='Also plot convergence')
+    parser.add_argument('-o', '--out-dir', default=None,
+                        help='Directory for the convergence plot (default: plots/ in the run directory, '
+                             'i.e. next to the tracks directory, e.g. minimillennium/plots/)')
     opts = parser.parse_args()
 
     space = analysis.load_space(opts.space_file)
@@ -98,7 +104,10 @@ def main():
             ax.legend(fontsize=8)
 
         plt.tight_layout()
-        out = os.path.join(opts.tracks_dir, 'pso_convergence.pdf')
+        # saved in the run's plots/ folder (previously inside the tracks directory)
+        out_dir = opts.out_dir or os.path.join(os.path.dirname(os.path.abspath(opts.tracks_dir.rstrip('/'))), 'plots')
+        os.makedirs(out_dir, exist_ok=True)
+        out = os.path.join(out_dir, 'pso_convergence.pdf')
         plt.savefig(out, bbox_inches='tight')
         print('\nConvergence plot saved to: %s' % out)
 

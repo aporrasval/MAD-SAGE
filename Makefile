@@ -1,4 +1,5 @@
-EXEC   = darksage
+# Executable name (was darksage until 2026-10-30)
+EXEC   = madsage
 
 SRCS   = 	./code/main.c \
 		./code/core_read_parameter_file.c \

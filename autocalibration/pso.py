@@ -23,7 +23,7 @@ def _cons_f_ieqcons_wrapper(f_ieqcons, args, kwargs, x):
 def pso(func, lb, ub, ieqcons=[], f_ieqcons=None, args=(), kwargs={}, 
         swarmsize=100, omega=0.5, phip=0.5, phig=0.5, maxiter=100, 
         minstep=1e-8, minfunc=1e-8, debug=False, processes=1,
-        particle_output=False, dumpfile_prefix=None):
+        particle_output=False, dumpfile_prefix=None, dump_transform=None):
     """
     Perform a particle swarm optimization (PSO)
    
@@ -79,6 +79,10 @@ def pso(func, lb, ub, ieqcons=[], f_ieqcons=None, args=(), kwargs={},
     particle_output : boolean
         Whether to include the best per-particle position and the objective
         values at those.
+    dump_transform : function
+        Optional function applied to the (S, D) particle positions before they
+        are written to the track files, e.g. to convert log10 search
+        coordinates back to physical parameter values (Default: None)
    
     Returns
     =======
@@ -109,7 +113,9 @@ def pso(func, lb, ub, ieqcons=[], f_ieqcons=None, args=(), kwargs={},
     if dumpfile_prefix:
         def dump(i, x, fx):
             np.save(dumpfile_prefix % i + "_fx", fx)
-            np.save(dumpfile_prefix % i + "_pos", x)
+            # positions are saved in physical units when a transform is given,
+            # so track files stay comparable regardless of how the space is sampled
+            np.save(dumpfile_prefix % i + "_pos", dump_transform(x) if dump_transform else x)
     else:
         dump = lambda *_: None
 

@@ -85,6 +85,40 @@ def load_matplotlib():
     plt.rcParams['legend.numpoints'] = 1
     return plt
 
+def read_madsage_par(fname):
+    """Parse a MAD-SAGE .par file into a {key: value-string} dictionary.
+
+    Mirrors the layout read by code/core_read_parameter_file.c: every active
+    line is 'Key   value   [; comment]'. Lines whose first character is '%',
+    '#' or ';' are treated as commented out, and the '-> N' lines that list
+    output snapshots are skipped. Values are returned as strings; callers
+    convert them to the type they need.
+    """
+    par = {}
+    with open(fname) as f:
+        for line in f:
+            stripped = line.strip()
+            if not stripped or stripped[0] in '%#;' or stripped.startswith('->'):
+                continue
+            tokens = stripped.split(';', 1)[0].split()
+            if len(tokens) >= 2:
+                par[tokens[0]] = tokens[1]
+    return par
+
+def count_tree_files(simulation_dir, tree_name):
+    """Count the merger-tree files available for a simulation.
+
+    MAD-SAGE opens trees as '<SimulationDir>/<TreeName>.<filenr>'
+    (code/core_io_tree.c), so this counts files matching exactly that pattern.
+    Returns 0 if the directory cannot be read (e.g. trees live on another machine).
+    """
+    import re
+    pattern = re.compile(r'^' + re.escape(tree_name) + r'\.\d+$')
+    try:
+        return sum(1 for f in os.listdir(simulation_dir) if pattern.match(f))
+    except OSError:
+        return 0
+
 def get_shark_output_dir(shark_dir, simu, model):
     return os.path.join(shark_dir, simu, model)
 

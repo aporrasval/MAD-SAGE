@@ -310,9 +310,7 @@ void prepare_galaxy_for_output(int filenr, int tree, struct GALAXY *g, struct GA
   o->BH_JetPower = g->BH_JetPower; 
   o->BH_JetEfficiency = g->BH_JetEfficiency; 
   o->BH_RadiativeEfficiency = g->BH_RadiativeEfficiency; 
-  o->Eddrate = g->Eddrate;
-  o->RadioEddrate = g->RadioEddrate;
-  o->InstaEddrate = g->InstaEddrate;
+  o->Eddrate = g->Eddrate;           
   o->PrimaryBHMass = g->PrimaryBHMass;
   o->SecondaryBHMass = g->SecondaryBHMass;
   o->PrimaryBHSpin = g->PrimaryBHSpin;
@@ -539,13 +537,7 @@ void prepare_galaxy_for_output_large(int filenr, int tree, struct GALAXY *g, str
   o->BH_JetEfficiency = g->BH_JetEfficiency; 
   o->BH_RadiativeEfficiency = g->BH_RadiativeEfficiency;
   o->Eddrate = g->Eddrate;
-  o->RadioEddrate = g->RadioEddrate;
-  o->InstaEddrate = g->InstaEddrate;
-  o->PrimaryBHMass   = g->PrimaryBHMass;
-  o->SecondaryBHMass = g->SecondaryBHMass;
-  o->PrimaryBHSpin   = g->PrimaryBHSpin;
-  o->SecondaryBHSpin = g->SecondaryBHSpin;
-
+  
   o->VelDispMergerBulge = g->VelDispMergerBulge;
 
   o->MetalsColdGas = g->MetalsColdGas;

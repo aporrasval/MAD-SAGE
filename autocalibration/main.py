@@ -19,6 +19,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 import argparse
+import functools
 import logging
 import math
 import multiprocessing
@@ -26,6 +27,8 @@ import os
 import sys
 import time
 #from memory_profiler import profile
+
+import numpy as np
 
 
 def _abspath(p):
@@ -49,7 +52,8 @@ import pso
 logger = logging.getLogger('main')
 
 def setup_logging(outdir):
-    log_fname = os.path.join(outdir, 'shark_pso.log')
+    # PSO log file (renamed from shark_pso.log, inherited from the Shark PSO code, on 2026-10-30)
+    log_fname = os.path.join(outdir, 'madsage_pso.log')
     fmt = '%(asctime)-15s %(name)s#%(funcName)s:%(lineno)s %(message)s'
     fmt = logging.Formatter(fmt)
     fmt.converter = time.gmtime
@@ -68,11 +72,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', help='Configuration file used as the basis for running shark', type=_abspath)
     parser.add_argument('-v', '--subvolumes', help='Comma- and dash-separated list of subvolumes to process', default='0')
-    parser.add_argument('-b', '--shark-binary', help='The shark binary to use, defaults to either "shark" or "../build/shark"',
+    # MAD-SAGE executable. Defaults to the madsage binary built by `make` in the
+    # repository root (found relative to this file, so it works from any directory).
+    # --shark-binary is kept as an alias for older commands; dest stays 'shark_binary'
+    # because execution.py (including the inherited Shark runners) reads opts.shark_binary.
+    parser.add_argument('-b', '--madsage-binary', '--shark-binary', dest='shark_binary', metavar='MADSAGE_BINARY',
+                        help='The MAD-SAGE binary to use, defaults to madsage in the repository root (../madsage)',
                         default=None, type=_abspath)
     parser.add_argument('-o', '--outdir', help='Auxiliary output directory, defaults to .', default=_abspath('.'),
                         type=_abspath)
-    parser.add_argument('-k', '--keep', help='Keep temporary output files', action='store_true')
+    parser.add_argument('-k', '--keep', help='Keep temporary output files (Shark runners only; the MAD-SAGE runner always keeps its temp .par files in -o and always removes galaxy output)', action='store_true')
 ###
 
 
@@ -82,10 +91,16 @@ def main():
                           type=int, default=None)
     pso_opts.add_argument('-m', '--max-iterations', help='Maximum number of iterations to reach before giving up, defaults to 20',
                           default=10, type=int)
-    pso_opts.add_argument('-S', '--space-file', help='File with the search space specification, defaults to space.txt',
-                          default='space.txt', type=_abspath)
-    pso_opts.add_argument('-t', '--stat-test', help='Stat function used to calculate the value of a particle, defaults to student-t',
-                          default='student-t', choices=list(analysis.stat_tests.keys()))
+    # Default search space is space_BHspin.txt next to this file (found relative to
+    # main.py, so it works from any directory). It used to be 'space.txt' in the
+    # current directory, inherited from the Shark PSO code, which does not exist here.
+    pso_opts.add_argument('-S', '--space-file', help='File with the search space specification, defaults to space_BHspin.txt in the autocalibration directory',
+                          default=_abspath(os.path.join(__file__, '..', 'space_BHspin.txt')), type=_abspath)
+    pso_opts.add_argument('--seed', type=int, default=None,
+                          help='Seed for the PSO random number generator. If omitted, one is drawn '
+                               'from the OS and written to the log so the run can be reproduced')
+    pso_opts.add_argument('-t', '--stat-test', help='Stat function used to calculate the value of a particle, defaults to chi2 (reduced chi-squared; project default since 2026-10-29)',
+                          default='chi2', choices=list(analysis.stat_tests.keys()))
     pso_opts.add_argument('-x', '--constraints', default='HIMF,SMF_z0,CSFRDH',
                           help=("Comma-separated list of constraints, any of HIMF, SMF_z0 or CSFRDH, defaults to 'HIMF,SMF_z0,CSFRDH'. "
                                 "Can specify a domain range after the name (e.g., 'SMF_z0(8-11)')"
@@ -107,16 +122,19 @@ def main():
     if not opts.config:
         parser.error('-c option is mandatory but missing')
 
+    # Check the binary exists. The default search used to be 'shark' and
+    # '../build/shark' (inherited from the Shark PSO code), which never exist here,
+    # so -b had to be passed every time; it now looks for the MAD-SAGE executable.
     if opts.shark_binary and not common.has_program(opts.shark_binary):
-        parser.error("shark binary '%s' not found, specify a correct one via -b" % opts.shark_binary)
+        parser.error("MAD-SAGE binary '%s' not found, specify a correct one via -b" % opts.shark_binary)
     elif not opts.shark_binary:
-        for candidate in ['shark', '../build/shark']:
+        for candidate in [_abspath(os.path.join(__file__, '..', '..', 'madsage'))]:
             if not common.has_program(candidate):
                 continue
             opts.shark_binary = _abspath(candidate)
             break
         if not opts.shark_binary:
-            parser.error("No shark binary found, specify one via -b")
+            parser.error("No MAD-SAGE binary found at ../madsage (run `make` in the repository root), or specify one via -b")
 
 #    _, _, _, redshift_file = common.read_configuration(opts.config)
 #    redshift_table = common._redshift_table(redshift_file)
@@ -125,6 +143,9 @@ def main():
     setup_logging(opts.outdir)
 
     opts.constraints = constraints.parse(opts.constraints)
+    # Read h, Omega, BoxLen, tree files and a_list from the MAD-SAGE .par file
+    # (replaces the hard-coded `sim` switch that used to live in constraints.py)
+    sim_info = constraints.configure(opts.config)
 #    for c in opts.constraints:
 #        c.redshift_table = redshift_table
 
@@ -133,6 +154,16 @@ def main():
     #
     # param_name, plot_label, is_log, lower_bound, upper_bound
     space = analysis.load_space(opts.space_file)
+
+    # The PSO explores is_log parameters uniformly in log10; lb/ub here are in
+    # those search coordinates. Track files and the log stay in physical units.
+    lb, ub = analysis.search_bounds(space)
+
+    # Seed the global numpy RNG used by pso.py (initial positions, velocities and
+    # random factors each iteration). Particle evaluation does not use random numbers.
+    if opts.seed is None:
+        opts.seed = int.from_bytes(os.urandom(4), 'little')
+    np.random.seed(opts.seed)
 
     ss = opts.swarm_size
     if ss is None:
@@ -151,23 +182,26 @@ def main():
         n_cpus = multiprocessing.cpu_count()
         print('seeing', n_cpus, 'CPUs')
         procs = min(n_cpus, ss)        
-        f = execution.run_darksage
+        f = execution.run_madsage
 
 
 
     logger.info('-----------------------------------------------------')
     logger.info('Runtime information')
-    logger.info('    shark binary: %s', opts.shark_binary)
+    logger.info('    MAD-SAGE binary: %s', opts.shark_binary)
     logger.info('    Base configuration file: %s', opts.config)
     logger.info('    Subvolumes to use: %r', subvols)
     logger.info('    Output directory: %s', opts.outdir)
     logger.info('    Keep temporary output files: %d', opts.keep)
+    logger.info('    Simulation (from .par file): %s', sim_info)
     logger.info("PSO information:")
     logger.info('    Search space parameters: %s', ' '.join(space['name']))
     logger.info('    Swarm size: %d', ss)
     logger.info('    Maximum iterations: %d', opts.max_iterations)
     logger.info('    Lower bounds: %r', space['lb'])
     logger.info('    Upper bounds: %r', space['ub'])
+    logger.info('    Log-sampled: %s', ' '.join(n for n, l in zip(space['name'], space['is_log']) if l))
+    logger.info('    Random seed: %d', opts.seed)
     logger.info('    Test function: %s', opts.stat_test)
     logger.info('Constraints:')
     for c in opts.constraints:
@@ -199,14 +233,24 @@ def main():
     except OSError:
         pass
 
+    # Run-directory layout (all inside -o):
+    #   madsage_pso.log, full_dump.txt (stdout redirect)
+    #   tracks/            per-iteration particle positions and fitness (pso.py)
+    #   temp/              one MAD-SAGE .par file per evaluated particle (execution.py)
+    #   MS_output_<pid>/   MAD-SAGE galaxy output, deleted after each evaluation
+    #   plots/             figures from post_analysis.py and best_fit_params.py
+    os.makedirs(os.path.join(opts.outdir, 'temp'), exist_ok=True)
+
     # Go, go, go!
     logger.info('Starting PSO now')
     tStart = time.time()
     if opts.hpc_mode:
         os.chdir('../hpc')
-    xopt, fopt = pso.pso(f, space['lb'], space['ub'], args=args, swarmsize=ss,
+    xopt, fopt = pso.pso(f, lb, ub, args=args, swarmsize=ss,
                          maxiter=opts.max_iterations, processes=procs,
-                         dumpfile_prefix=os.path.join(tracksdir, 'track_%03d'))
+                         dumpfile_prefix=os.path.join(tracksdir, 'track_%03d'),
+                         dump_transform=functools.partial(analysis.to_physical, space=space))
+    xopt = analysis.to_physical(xopt, space)  # report the best fit in physical units
     tEnd = time.time()
 
     global count

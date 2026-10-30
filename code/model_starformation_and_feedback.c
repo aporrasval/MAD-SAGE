@@ -1205,7 +1205,7 @@ void delayed_feedback(int p, int k_now, double time, double dt)
     
     
     // loop over age bins prior to the current one and calculate the return fraction and SN per remaining mass
-    // might be more optimal to do this calculation outside this function and feed it in.  Or, even better, build a look-up table at the start of running Dark Sage.  The same calculation is being done many times with the current set-up, which is redundant.  The logic right now is safe though!
+    // might be more optimal to do this calculation outside this function and feed it in.  Or, even better, build a look-up table at the start of running MAD-SAGE.  The same calculation is being done many times with the current set-up, which is redundant.  The logic right now is safe though!
     if(k_now==N_AGE_BINS-1) return;
     double ReturnFraction[N_AGE_BINS], SNperMassRemaining[N_AGE_BINS];
 //    double time_convert = 1e-3 * UnitTime_in_s / SEC_PER_MEGAYEAR / Hubble_h;

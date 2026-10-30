@@ -94,10 +94,10 @@ make
 python compile.py
 
 # Run
-./darksage input/minimillennium.par
+./madsage input/minimillennium.par
 
 # Run with MPI (experimental)
-mpirun -np 8 ./darksage input/tng100.par
+mpirun -np 8 ./madsage input/minimillennium.par
 ```
 
 There are no automated tests. Manual validation is done by running on a small simulation (Mini-Millennium) and checking galaxy property distributions against observations.
@@ -153,56 +153,72 @@ When modifying `model_mad.c`, the `GALAXY` struct fields for black holes are def
 
 ## Autocalibration
 
-`autocalibration/` contains a Particle Swarm Optimization (PSO) system to tune DarkSAGE free parameters against observational constraints.
+`autocalibration/` contains a Particle Swarm Optimization (PSO) system to tune MAD-SAGE free parameters against observational constraints.
 
 **Entry point:** `main.py`
 
-**Typical run:**
+**Typical run (Mini-Millennium):**
 ```bash
 cd autocalibration
+mkdir -p minimillennium
 python main.py \
-  -c /path/to/parameter.par \
-  -S space_GUREFT.txt \
-  -o output_dir \
-  -m 50 \
-  -s 20 \
-  -v 0-31 \
-  -x "SMF_z6,QLF_z6,CSFRDH*2" \
-  -t student-t
+  -c ../input/minimillennium.par \
+  -b ../madsage \
+  -S space_BHspin.txt \
+  -o minimillennium \
+  -m 20 \
+  -s 12 \
+  -x "SMF_z0,HIMF,CSFRDH" \
+  -t chi2 \
+  --seed 12345 > minimillennium/full_dump.txt
+```
+
+**Choosing the swarm size (`-s`):** set the number of particles equal to the number of tasks (CPU cores / SLURM `--ntasks`) available, so every particle in an iteration runs MAD-SAGE at the same time. More particles than tasks makes each iteration run in several sequential batches. On a laptop, use 2 particles. For a quick test, also use 1 iteration (`-m 1`), which only evaluates the random starting swarm (no PSO update) and takes about 4 minutes on Mini-Millennium:
+```bash
+cd autocalibration
+mkdir -p minimillennium
+python main.py -c ../input/minimillennium.par -b ../madsage -S space_BHspin.txt \
+  -o minimillennium -s 2 -m 1 -x "SMF_z0,HIMF,CSFRDH" -t chi2 --seed 12345 \
+  > minimillennium/full_dump.txt
 ```
 
 **Key arguments:**
-- `-c` — DarkSAGE `.par` config file (required)
-- `-S` — Search space file defining parameter bounds (default: `space.txt`)
+- `-c` — MAD-SAGE `.par` template (required); h, Omega, BoxLen, tree files, a_list and output prefix are read from it by `constraints.configure()`
+- `-b` — MAD-SAGE binary (default: `../madsage`)
+- `-S` — Search space file defining parameter bounds (default: `space_BHspin.txt` in `autocalibration/`)
 - `-x` — Comma-separated constraints; supports domain `(low-high)` and weight `*N` suffixes
-- `-t` — Goodness-of-fit test: `student-t` or `chi2`
+- `-t` — Goodness-of-fit test: `chi2` (reduced chi2; default and preferred) or `student-t` (negative log-likelihood, more tolerant of outlier bins)
 - `-m` — Max PSO iterations (default: 10)
-- `-s` — Swarm size (default: 10 + 2√D where D = number of free parameters)
-- `-H` — HPC/SLURM mode for cluster submission
+- `-s` — Swarm size (default: 10 + 2√D where D = number of free parameters); set equal to the number of tasks/cores, 2 on a laptop
+- `--seed` — RNG seed; drawn from the OS and logged if omitted
+- `-o` — Run directory: `madsage_pso.log`, `tracks/`, `temp/` (per-particle `.par` files `<par>_<pid>_<NNNN>_temp.par`, always kept), `MS_output_<pid>/` (MAD-SAGE output, deleted after each evaluation), `plots/` (from `post_analysis.py` and `best_fit_params.py --plot`)
+- `-H`, `-v` — inherited from Shark; not functional for MAD-SAGE
 
-**Search space file format** (`space_GUREFT.txt`):
+**Objective:** ∏ stat_i^w_i over constraints (both statistics are positive, smaller is better).
+
+**Search space file format** (`space_BHspin.txt`):
 ```
 ParamName, PlotLabel, IsLog, LowerBound, UpperBound
-RadiativeEfficiency, eBH, 0, 0.0378, 0.4226
-GasSinkRate, fmove, 1, 0.01, 0.999
-EnergySN, eSN, 1, 5e49, 3e51
+GasSinkRate,fmove,1,0.01,0.999
+EnergySN,eSN,1,5e49,3e51
 ```
-`IsLog=1` means the parameter is sampled log-uniformly.
+Bounds are physical. `IsLog=1` means the PSO samples the parameter log-uniformly (search runs in log10); the temp `.par`, log and track files are always in physical units.
 
-**Current free parameters:** `RadiativeEfficiency` (BH accretion efficiency), `GasSinkRate` (gas inflow rate to BH), `EnergySN` (SN feedback energy).
+**Current free parameters:** `GasSinkRate` (gas inflow rate to BH), `EnergySN` (SN feedback energy).
 
-**Available constraints** (defined in `constraints.py`):
-- `SMF_z6` — Stellar mass function at z=6 (Weibel et al. 2024)
-- `QLF_z6` — AGN bolometric luminosity function at z=6 (JWST + Shen+20)
-- `CSFRDH` — Cosmic star formation rate density history (D'Silva et al. 2023)
+**Available constraints** (defined in `constraints.py`, all z = 0):
+- `SMF_z0` — Stellar mass function (Driver et al. 2022, GAMA); default domain log M* 8–13
+- `HIMF` — HI mass function (Jones et al. 2018); default domain log M_HI 7–12
+- `CSFRDH` — Cosmic star formation rate density history from stellar age bins (D'Silva et al. 2023)
 
 **Script roles:**
-- `pso.py` — PSO algorithm (adapted from PySwarm); saves per-iteration tracks to `output_dir/tracks/`
-- `execution.py` — Writes a temp `.par` file per particle, runs DarkSAGE, evaluates constraints, returns fitness
-- `constraints.py` — Loads observation CSVs and model snapshots, computes goodness-of-fit per constraint
-- `analysis.py` — Statistical tests (`chi2`, `studentT`) and search space loader
-- `common.py` — I/O utilities: reads `.par` files, observation data, HDF5 galaxy catalogs
-- `diagnostics.py` — Visualizes PSO convergence from tracks (`python diagnostics.py -S space.txt tracks/`)
+- `pso.py` — PSO algorithm (adapted from PySwarm); saves per-iteration tracks to `output_dir/tracks/` (positions in physical units)
+- `execution.py` — Writes a temp `.par` file per particle, runs MAD-SAGE, evaluates constraints, returns fitness
+- `constraints.py` — Loads observation files and model snapshots, computes goodness-of-fit per constraint; `configure()` sets simulation info from the `.par` file
+- `analysis.py` — Statistical tests (`chi2`, `studentT`), search space loader, log/physical transforms
+- `common.py` — I/O utilities: reads MAD-SAGE `.par` files, counts tree files, loads observation data
+- `best_fit_params.py` — Best-fit parameters and convergence plot from tracks
+- `diagnostics.py` — Visualizes PSO convergence from tracks (`python diagnostics.py -S space_BHspin.txt minimillennium/tracks`)
 - `post_analysis.py` — Reconstructs and plots model vs. observation fits from PSO log
 
 **Python dependencies:** `numpy`, `scipy`, `h5py`, `matplotlib`; optional `pandas`/`seaborn` for pairplots.

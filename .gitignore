@@ -1,11 +1,13 @@
-# Compiled binary
+# Compiled binary (renamed from darksage to madsage on 2026-10-30; old name kept so a
+# leftover darksage binary is not picked up by git)
+madsage
 darksage
 
 # C object files (intermediate build artifacts)
 *.o
 
 # Galaxy catalog output (can be large binary files)
-output/results/
+output/results*/
 
 # Python cache
 __pycache__/
@@ -20,6 +22,7 @@ __pycache__/
 # PSO run outputs (numbered run directories and logs)
 autocalibration/[0-9]*/
 autocalibration/tracks/
+madsage_pso.log
 shark_pso.log
 
 # macOS system files
@@ -31,3 +34,15 @@ shark_pso.log
 
 # Jupyter checkpoints
 .ipynb_checkpoints/
+
+# Per-particle MAD-SAGE scratch output and temporary .par files written by autocalibration/execution.py
+autocalibration/MS_output_*/
+autocalibration/DS_output_*/
+autocalibration/*_temp.par
+
+# PSO run directories (log, tracks/, temp .par files), e.g. autocalibration/minimillennium/
+autocalibration/minimillennium/
+
+# Mini-Millennium merger trees (152 MB of simulation data): kept out of the repository;
+# download separately and point SimulationDir / FileWithSnapList in the .par file to them
+mini_millennium/

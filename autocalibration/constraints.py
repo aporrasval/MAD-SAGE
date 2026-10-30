@@ -46,53 +46,88 @@ mbins = np.arange(mlow, mupp, dm)
 xmf = mbins + dm/2.0
 
 # QLF
-mupp_qlf = 48
-dm_qlf = 0.2
-mlow_qlf = 43.0 - dm_qlf*10.5
-mbins_qlf = np.arange(mlow_qlf, mupp_qlf, dm_qlf)
-qlfbins = mbins_qlf + dm_qlf/2.0
+#mupp_qlf = 48
+#dm_qlf = 0.2
+#mlow_qlf = 43.0 - dm_qlf*10.5
+#mbins_qlf = np.arange(mlow_qlf, mupp_qlf, dm_qlf)
+#qlfbins = mbins_qlf + dm_qlf/2.0
 
-# mupp2 = 12
-# dm2 = 0.2
-# mlow2 = 8.3285057 - dm2*10.5
-# mbins2 = np.arange(mlow2,mupp2,dm2)
-# xmf2 = mbins2 + dm2/2.0
+mupp2 = 12
+dm2 = 0.2
+mlow2 = 8.3285057 - dm2*10.5
+mbins2 = np.arange(mlow2,mupp2,dm2)
+xmf2 = mbins2 + dm2/2.0
 
-# ssfrlow = -6
-# ssfrupp = 4
-# dssfr = 0.2
-# ssfrbins = np.arange(ssfrlow,ssfrupp,dssfr)
+ssfrlow = -6
+ssfrupp = 4
+dssfr = 0.2
+ssfrbins = np.arange(ssfrlow,ssfrupp,dssfr)
 
 Nmin = 5 # minimum number of galaxies expected in a mass bin for the simulation volume, based on observations, to warrant fitting to that bin for mass functions
 
-# Manually set information for the simulation
-sim = 3
-files = range(8)
-if sim==0: # TNG300
-    h0 = 0.6774
-    Omega0 = 0.3089
-    vol = (205.0/h0)**3 * (1.0*len(files)/128.)
-    age_alist_file = '/Users/adam/Illustris/alist_TNG.txt'
-elif sim==1: # GUREFT90 box
-    h0 = 0.678000
-    Omega0 = 0.307000
-    vol = (90.0/h0)**3 #* (1.0*len(files)/8.)
-    age_alist_file = '/home/ajp79/project/merger_trees/GUREFT/GUREFTnew_alist.csv'
-elif sim==2: # TNG100-1 simulation
-    h0 = 0.6774
-    Omega0 = 0.3089
-    vol = (110.7/h0)**3 #* (1.0*len(files)/8.)
-    age_alist_file = '/home/ajp79/project/merger_trees/TNG100-1-Dark/illustristng.a_list'
-elif sim==3: # Mini-Millennium
-    h0 = 0.73
-    Omega0 = 0.25
-    vol = (62.5/h0)**3  # (Mpc/h)^3
-    age_alist_file = '/Users/porrasaj/Documents/Astronomy_research/DarkSAGE/running_test_minimillennium/mini_millennium/millennium.a_list'
-else:
-    h0 = 0.6774
-    Omega0 = 0.3089
-    vol = (62.5/h0)**3
-    age_alist_file = '/home/ajp79/project/fs1/DarkSage/2024DarkSage/miniMTNG_trees/MTNG_alist.txt'
+# Simulation information. These module-level values are filled in by configure()
+# below from the MAD-SAGE .par file passed to main.py with -c, so the same code
+# runs on any simulation without edits. They used to be hard-coded through a
+# `sim` switch; the values it held were, for reference:
+#   TNG300:          h=0.6774, Omega=0.3089, 205 Mpc/h box, volume scaled by Nfiles/128
+#   GUREFT90:        h=0.678,  Omega=0.307,  90 Mpc/h box
+#   TNG50-4:         h=0.6774, Omega=0.3089, 35 Mpc/h box
+#   Mini-Millennium: h=0.73,   Omega=0.25,   62.5 Mpc/h box, 8 tree files
+#   miniMTNG:        h=0.6774, Omega=0.3089, 62.5 Mpc/h box
+h0 = None                  # Hubble_h (dimensionless)
+Omega0 = None              # Omega (matter density); Lambda is taken as 1 - Omega0 throughout this module
+vol = None                 # comoving volume covered by the tree files that were run [Mpc^3, no h]
+files = None               # tree-file numbers run by MAD-SAGE (FirstFile..LastFile inclusive)
+age_alist_file = None      # FileWithSnapList: scale factors of the snapshots, used for age-bin edges
+galaxy_file_prefix = None  # FileNameGalaxies: output files are named <prefix>_z<redshift>_<filenr>
+
+def configure(par_file):
+    """Set the simulation globals above from a MAD-SAGE .par file.
+
+    Must be called before any constraint is evaluated, in every process that
+    evaluates constraints (multiprocessing on macOS uses 'spawn', so worker
+    processes do not inherit globals set in the parent).
+
+    Volume: BoxLen is in Mpc/h, so the full box is (BoxLen/h)^3 Mpc^3. If only
+    a subset of the tree files is run, the volume is scaled by
+    N_files_run / N_files_total, assuming files cover equal sub-volumes (the same
+    assumption the old TNG300 setting made). N_files_total is counted from
+    SimulationDir; if the trees cannot be found there, the run is assumed to
+    cover the whole box and a warning is printed.
+
+    Returns a one-line summary for logging.
+    """
+    global h0, Omega0, vol, files, age_alist_file, galaxy_file_prefix
+
+    par = common.read_madsage_par(par_file)
+
+    # Relative paths in the .par file (e.g. ./mini_millennium/treedata) are relative
+    # to the directory madsage runs in, which is the repository root
+    # (execution.run_madsage launches it with cwd=repo root). Python runs from
+    # autocalibration/, so resolve them against the repository root here so that
+    # Python reads the same a_list and tree files as madsage. Absolute paths are
+    # unchanged.
+    repo_root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+    def _from_repo_root(path):
+        return path if os.path.isabs(path) else os.path.normpath(os.path.join(repo_root, path))
+
+    h0 = float(par['Hubble_h'])
+    Omega0 = float(par['Omega'])
+    files = range(int(par['FirstFile']), int(par['LastFile']) + 1)
+    age_alist_file = _from_repo_root(par['FileWithSnapList'])
+    galaxy_file_prefix = par['FileNameGalaxies']
+
+    box_len = float(par['BoxLen'])  # [Mpc/h]
+    simulation_dir = _from_repo_root(par['SimulationDir'])
+    n_total = common.count_tree_files(simulation_dir, par['TreeName'])
+    if n_total == 0:
+        print('WARNING: no %s.N tree files found in %s; assuming the run covers the full box'
+              % (par['TreeName'], simulation_dir))
+        n_total = len(files)
+    vol = (box_len / h0)**3 * len(files) / float(n_total)
+
+    return ('h=%g, Omega=%g, BoxLen=%g Mpc/h, tree files %d-%d of %d, volume=%.4g Mpc^3, a_list=%s'
+            % (h0, Omega0, box_len, files[0], files[-1], n_total, vol, age_alist_file))
 
 # These are two easily create variables of these different shapes without
 # actually storing a reference ourselves; we don't need it
@@ -101,7 +136,7 @@ zeros2 = lambda: np.zeros(shape=(1, 3, len(xmf2)))
 zeros3 = lambda: np.zeros(shape=(1, len(mbins)))
 zeros4 = lambda: np.empty(shape=(1), dtype=np.bool_)
 zeros5 = lambda: np.zeros(shape=(1, len(ssfrbins)))
-zeros6 = lambda: np.zeros(shape=(1, len(mbins_qlf)))
+zeros6 = lambda: np.zeros(shape=(1, len(mbins2)))
 
 class Constraint(object):
     """Base classes for constraint objects"""
@@ -118,8 +153,7 @@ class Constraint(object):
 
         # Histograms we are interested in
         hist_smf = zeros3()
-        hist_qlf = zeros6()
-        # hist_HImf = zeros6()
+        hist_HImf = zeros6()
 
 #        fields = {
 #            'galaxies': (
@@ -134,9 +168,10 @@ class Constraint(object):
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
         # hard coding stuff here that should be generalised
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
-        fields = ['StellarMass', 'LenMax', 'Lbol']
+        fields = ['StellarMass', 'DiscHI', 'LenMax', 'StellarFormationMass']
         Nage = 30
-        G = r.darksage_snap(modeldir+'model_z5.897', files, Nannuli=30, Nage=Nage, fields=fields)
+        # output file prefix comes from FileNameGalaxies in the .par file (was hard-coded 'model')
+        G = r.madsage_snap(modeldir + galaxy_file_prefix + '_z0.000', files, Nannuli=30, Nage=Nage, fields=fields)
         
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
@@ -160,10 +195,11 @@ class Constraint(object):
         hist_smf, _ = np.histogram(logSM, bins=mbins)
         hist_smf = hist_smf / (dm * vol)
 
-        logLbol = G['Lbol']
-        logLbol[~np.isfinite(logLbol)] = -20
-        hist_qlf, _ = np.histogram(logLbol, bins=mbins_qlf)
-        hist_qlf = hist_qlf / (dm_qlf * vol)
+        logHIM = np.log10(np.sum(G['DiscHI'], axis=1)*1e10/h0)
+        logHIM[~np.isfinite(logHIM)] = -20
+        hist_HImf, _ = np.histogram(logHIM, bins=mbins2)
+        hist_HImf = hist_HImf / (dm2 * vol)
+        
         
 #        # sum mass from age bins of all components
 #        StarsByAge = np.zeros(Nage)
@@ -175,21 +211,21 @@ class Constraint(object):
 #            StarsByAge[k] += np.sum(G['LocalIGS'][:,k])
             
 #         # get the edges of the age bins
-#         alist = np.loadtxt(age_alist_file)
-#         if Nage>=len(alist)-1:
-#             alist = alist[::-1]
-#             RedshiftBinEdge = 1./ alist - 1.
-#         else:
-#             indices_float = np.arange(Nage+1) * (len(alist)-1.0) / Nage
-#             indices = indices_float.astype(np.int32)
-#             alist = alist[indices][::-1]
-#             RedshiftBinEdge = 1./ alist - 1.
-#         TimeBinEdge = np.array([r.z2tL(redshift, h0, Omega0, 1.0-Omega0) for redshift in RedshiftBinEdge]) # look-back time [Gyr]
-#         dT = np.diff(TimeBinEdge) # time step for each bin
-#         TimeBinCentre = TimeBinEdge[:-1] + 0.5*dT
-# #        m, lifetime, returned_mass_fraction_integrated, ncum_SN = r.return_fraction_and_SN_ChabrierIMF()
-# #        eff_recycle = np.interp(TimeBinCentre, lifetime[::-1], returned_mass_fraction_integrated[::-1])
-#         SFRbyAge = np.sum(G['StellarFormationMass'], axis=0)*1e10/h0 / (dT*1e9)
+        alist = np.loadtxt(age_alist_file)
+        if Nage>=len(alist)-1:
+            alist = alist[::-1]
+            RedshiftBinEdge = 1./ alist - 1.
+        else:
+            indices_float = np.arange(Nage+1) * (len(alist)-1.0) / Nage
+            indices = indices_float.astype(np.int32)
+            alist = alist[indices][::-1]
+            RedshiftBinEdge = 1./ alist - 1.
+        TimeBinEdge = np.array([r.z2tL(redshift, h0, Omega0, 1.0-Omega0) for redshift in RedshiftBinEdge]) # look-back time [Gyr]
+        dT = np.diff(TimeBinEdge) # time step for each bin
+        TimeBinCentre = TimeBinEdge[:-1] + 0.5*dT
+ #       m, lifetime, returned_mass_fraction_integrated, ncum_SN = r.return_fraction_and_SN_ChabrierIMF()
+ #       eff_recycle = np.interp(TimeBinCentre, lifetime[::-1], returned_mass_fraction_integrated[::-1])
+        SFRbyAge = np.sum(G['StellarFormationMass'], axis=0)*1e10/h0 / (dT*1e9)
 
 
         #########################
@@ -197,17 +233,17 @@ class Constraint(object):
         ind = (hist_smf > 0.)
         hist_smf[ind] = np.log10(hist_smf[ind])
         hist_smf[~ind] = -20
-        ind = (hist_qlf > 0.)
-        hist_qlf[ind] = np.log10(hist_qlf[ind])
-        hist_qlf[~ind] = -20
-        # SFRD_Age = np.log10(SFRbyAge/vol)
-        # SFRD_Age[~np.isfinite(SFRD_Age)] = -20
+        ind = (hist_HImf > 0.)
+        hist_HImf[ind] = np.log10(hist_HImf[ind])
+        hist_HImf[~ind] = -20
+        SFRD_Age = np.log10(SFRbyAge/vol)
+        SFRD_Age[~np.isfinite(SFRD_Age)] = -20
         
         # have moved where this was in the code. Don't understand its purpose
-        hist_qlf = hist_qlf[np.newaxis]
+        hist_HImf = hist_HImf[np.newaxis]
         hist_smf = hist_smf[np.newaxis]
 
-        return h0, Omega0, hist_smf, hist_qlf  #, TimeBinEdge, SFRD_Age
+        return h0, Omega0, hist_smf, hist_HImf, TimeBinEdge, SFRD_Age
 
 
     def load_observation(self, *args, **kwargs):
@@ -219,9 +255,9 @@ class Constraint(object):
         """Gets the model and observational data for further analysis.
         The model data is interpolated to match the observation's X values."""
 
-        h0, Omega0, hist_smf, hist_qlf = self._load_model_data(modeldir, subvols)
+        h0, Omega0, hist_smf, hist_HImf, TimeBinEdge, SFRD_Age = self._load_model_data(modeldir, subvols)
         x_obs, y_obs, y_dn, y_up = self.get_obs_x_y_err()
-        x_mod, y_mod = self.get_model_x_y(hist_smf, hist_qlf)
+        x_mod, y_mod = self.get_model_x_y(hist_smf, hist_HImf, TimeBinEdge, SFRD_Age)
         return x_obs, y_obs, y_dn, y_up, x_mod, y_mod
 
     def get_data(self, modeldir, subvols):
@@ -248,93 +284,70 @@ class Constraint(object):
         args = self.__class__.__name__, self.domain[0], self.domain[1], self.weight, self.rel_weight
         return s % args
 
+class HIMF(Constraint):
+    """The HI Mass Function constraint"""
 
-class QLF_z6(Constraint):
-    """AGN bolometric luminosity constrain"""
-
-    domain = (43, 48)
-    z = [6]
+    domain = (7, 12)
+    z = [0]
 
     def get_obs_x_y_err(self):
-
-        logLbol, logPhi, logPhi_high, logPhi_low = self.load_observation('JWST_QLFz6.csv', cols=[0,1,2,3])
-
-        x_obs = logLbol 
-        y_obs = logPhi
+        # Load Jones18 data and correct data for their choice of cosmology
+        hobs = 0.7
+        log_mHI, phiHI, delta_phiHI = self.load_observation('Jones2018_HIMF.dat', cols=[0,1,2])
+        ferror = (delta_phiHI >= phiHI) # catch any instances where there is a 100% error
+        delta_phiHI[ferror] = phiHI[ferror] * 0.9999
+        x_obs = log_mHI + 2.0 * np.log10(hobs/h0)
+        y_obs = np.log10(phiHI) + 3.0 * np.log10(h0/hobs)
+        y_dn = np.log10(phiHI) - np.log10(phiHI - delta_phiHI)
+        y_dn[~np.isfinite(y_dn)] = 20
+        y_up = np.log10(phiHI + delta_phiHI) - np.log10(phiHI)
         bin_min = np.log10( Nmin / ( vol * abs(np.median(np.diff(x_obs))) ) )
         fmin = (y_obs >= bin_min)
         lfm = len(fmin[fmin])
         if lfm <= 0: print("Nmin, vol, dx, bin_min", Nmin, vol, np.median(np.diff(x_obs)), bin_min, '\ny_obs', y_obs)
         assert(lfm > 0)
-        return x_obs[fmin], y_obs[fmin], logPhi_low[fmin], logPhi_high[fmin]
+        return x_obs[fmin], y_obs[fmin], y_dn[fmin], y_up[fmin]
 
-    def get_model_x_y(self, _, hist_qlf):
-        y = hist_qlf[0,:]
+    def get_model_x_y(self, _, hist_HImf, _2, _3):
+        y = hist_HImf[0]
         ind = np.where(y < 0.)
-        return qlfbins[ind], y[ind]
+        return xmf2[ind], y[ind]
+
 
 class SMF(Constraint):
     """Common logic for SMF constraints"""
 
-    domain = (7, 11)
+    domain = (8, 13) # allowed SMF fit range [log10 Msun]; restored to DS24 fiducial value (was (7, 11), inherited from z~6 SMF code, which rejected SMF_z0(9-12))
 
     def get_model_x_y(self, hist_smf, _, _2, _3):
         y = hist_smf[0,:]
         ind = np.where(y < 0.)
         return xmf[ind], y[ind]
 
-class SMF_z6(Constraint):
+class SMF_z0(SMF):
     """The SMF constraint at z=0"""
 
-    domain = (7, 11)
-    z = [6]
+    z = [0]
 
     def get_obs_x_y_err(self):
         # Load data from Driver et al. (2022)
-        logm, logPhi, logPhi_high, logPhi_low = self.load_observation('weibel24_SMFz6.csv', cols=[0,1,2,3])
-        # cosmology_correction_median = np.log10( r.comoving_distance(0.079, 100*h0, 0, Omega0, 1.0-Omega0) / r.comoving_distance(0.079, 70.0, 0, 0.3, 0.7) )
-        # cosmology_correction_maximum = np.log10( r.comoving_distance(0.1, 100*h0, 0, Omega0, 1.0-Omega0) / r.comoving_distance(0.1, 70.0, 0, 0.3, 0.7) )
-        x_obs = logm #+ 2.0 * cosmology_correction_median 
-        y_obs = logPhi #- 3.0 * cosmology_correction_maximum # + 0.0807 # last factor accounts for average under-density of GAMA and to correct for this to be at z=0
+        logm, logphi, dlogphi = self.load_observation('GAMA_SMF_highres.csv', cols=[0,1,2])
+        cosmology_correction_median = np.log10( r.comoving_distance(0.079, 100*h0, 0, Omega0, 1.0-Omega0) / r.comoving_distance(0.079, 70.0, 0, 0.3, 0.7) )
+        cosmology_correction_maximum = np.log10( r.comoving_distance(0.1, 100*h0, 0, Omega0, 1.0-Omega0) / r.comoving_distance(0.1, 70.0, 0, 0.3, 0.7) )
+        x_obs = logm + 2.0 * cosmology_correction_median 
+        y_obs = logphi - 3.0 * cosmology_correction_maximum + 0.0807 # last factor accounts for average under-density of GAMA and to correct for this to be at z=0
         bin_min = np.log10( Nmin / ( vol * abs(np.median(np.diff(x_obs))) ) )
         fmin = (y_obs >= bin_min)
         lfm = len(fmin[fmin])
         if lfm <= 0: print("Nmin, vol, dx, bin_min", Nmin, vol, np.median(np.diff(x_obs)), bin_min, '\ny_obs', y_obs)
         assert(lfm > 0)
-        return x_obs[fmin], y_obs[fmin], logPhi_low[fmin], logPhi_high[fmin]
-
-    def get_model_x_y(self, hist_smf, _):
-        y = hist_smf[0,:]
-        ind = np.where(y < 0.)
-        return xmf[ind], y[ind]
+        return x_obs[fmin], y_obs[fmin], dlogphi[fmin], dlogphi[fmin]
 
 
-class SMF_z1(SMF):
-    """The SMF constraint at z=1"""
+# SMF_z1 (z = 1 SMF from Wright et al. 2018) was removed on 2026-10-30: its observation
+# file (mf/SMF/Wright18_CombinedSMF.dat) is not in the repository, so it could not run,
+# and the model is only read at z = 0 (_load_model_data). It is in git history if needed.
 
-    z = [1]
-
-    def get_obs_x_y_err(self):
-
-        # Wright et al. (2018, several reshifts). Assumes Chabrier IMF.
-        zD17, lmD17, pD17, dp_dn_D17, dp_up_D17 = self.load_observation('mf/SMF/Wright18_CombinedSMF.dat', cols=[0,1,2,3,4])
-        hobs = 0.7
-        pD17 = pD17 - 3.0 * np.log10(hobs)
-        lmD17 = lmD17 - np.log10(hobs)
-        in_redshift = np.where(zD17 == 1)
-        x_obs = lmD17[in_redshift]
-        y_obs = pD17[in_redshift]
-        y_dn = dp_dn_D17[in_redshift]
-        y_up = dp_up_D17[in_redshift]
-        
-        bin_min = np.log10( Nmin / ( vol * abs(np.median(np.diff(x_obs))) ) )
-        fmin = (y_obs >= bin_min)
-        lfm = len(fmin[fmin])
-        if lfm <= 0: print("Nmin, vol, dx, bin_min", Nmin, vol, np.median(np.diff(x_obs)), bin_min, '\ny_obs', y_obs)
-        assert(lfm > 0)
-
-        return x_obs[fmin], y_obs[fmin], y_dn[fmin], y_up[fmin]
-                              
 class CSFRDH(Constraint):
 
     z = [0]
@@ -374,62 +387,20 @@ class CSFRDH(Constraint):
         
     
 
+# raw strings throughout so '\.' is a regex escape rather than an (invalid) Python string escape;
+# the pattern itself is unchanged
 _constraint_re = re.compile((r'([0-9_a-zA-Z]+)' # name
-                              '(?:\\(([0-9\.]+)-([0-9\.]+)\))?' # domain boundaries
-                              '(?:\\*([0-9\.]+))?')) # weight
-class SMF_z0(SMF):
-    """SMF constraint at z=0, compared against Driver+2022 (GAMA)"""
-
-    domain = (9.0, 12.0)
-
-    def _load_model_data(self, modeldir, subvols):
-        import glob
-        files_z0 = sorted(glob.glob(modeldir + 'model_z0.000_*'))
-        parts = []
-        for f in files_z0:
-            if os.path.getsize(f) == 0:
-                continue
-            g = r.darksage_out_single(f, Nannuli=30, Nage=30)
-            if g is not None and len(g) > 0:
-                parts.append(g['StellarMass'])
-
-        hist_smf = np.full((1, len(mbins)-1), -20.0)  # len(mbins)-1 to match np.histogram output (N bins = N+1 edges)
-        if not parts:
-            return h0, Omega0, hist_smf, zeros6()
-
-        stellar = np.concatenate(parts) * 1e10 / h0   # Msun
-        logSM = np.where(stellar > 0, np.log10(np.maximum(stellar, 1e-30)), -20.0)
-        logSM[~np.isfinite(logSM)] = -20.0
-
-        counts, _ = np.histogram(logSM, bins=mbins)
-        phi = counts / (dm * vol)
-        ind = phi > 0
-        hist_smf[0, ind] = np.log10(phi[ind])
-
-        return h0, Omega0, hist_smf, zeros6()
-
-    def get_obs_x_y_err(self):
-        # Driver+2022 (GAMA), h=0.7; log10(Phi) in Mpc^{-3} dex^{-1}
-        logTSM, logPhi, uncert = self.load_observation('GAMA_SMF_highres.csv', cols=[0, 1, 2])
-        # h-correction on masses: Driver uses h=0.7, simulation uses h=0.73
-        logTSM = logTSM + 2 * np.log10(0.7 / h0)
-        filt = (logTSM >= self.domain[0]) & (logTSM <= self.domain[1])
-        return logTSM[filt], logPhi[filt], uncert[filt], uncert[filt]
-
-    def get_model_x_y(self, hist_smf, _):
-        y = hist_smf[0, :]
-        ind = np.where(y < 0.)
-        return xmf[ind], y[ind]
-
+                              r'(?:\(([0-9\.]+)-([0-9\.]+)\))?' # domain boundaries
+                              r'(?:\*([0-9\.]+))?')) # weight
 
 def parse(spec):
     """Parses a comma-separated string of constraint names into a list of
     Constraint objects. Specific domain values can be specified in `spec`"""
 
     _constraints = {
-        'QLF_z6': QLF_z6,
-        'SMF_z6': SMF_z6,
+        'HIMF': HIMF,
         'SMF_z0': SMF_z0,
+        'CSFRDH': CSFRDH
     }
 
     def _parse(s):

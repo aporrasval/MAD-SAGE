@@ -97,9 +97,7 @@ void init_galaxy(int p, int halonr)
     Gal[p].BH_JetPower = 0.0;
     Gal[p].BH_JetEfficiency = 0.0;
     Gal[p].BH_RadiativeEfficiency = 0.0;
-    Gal[p].Eddrate = 0.0;
-    Gal[p].RadioEddrate = 0.0;
-    Gal[p].InstaEddrate = 0.0;
+    Gal[p].Eddrate = 0.0;     
     Gal[p].PrimaryBHMass = 0.0;
     Gal[p].SecondaryBHMass = 0.0;
     Gal[p].PrimaryBHSpin = SpinSeedValue;
@@ -263,7 +261,7 @@ void init_galaxy(int p, int halonr)
 double get_disk_radius(int halonr, int p)
 {
     // See Mo, Mao & White (1998) eq12, and using a Bullock style lambda.
-    // This is a legacy calculation that is made use of, but does NOT represent actual disc size in Dark Sage at all
+    // This is a legacy calculation that is made use of, but does NOT represent actual disc size in MAD-SAGE at all
     double SpinMagnitude, radius;
     
     if(Gal[p].Type==0)
@@ -1148,7 +1146,7 @@ void get_RecycleFraction_and_NumSNperMass(double t0, double t1, double *stellar_
 {
     double m0, m1;//, piecewise_int, frac_already_lost, norm_multiplier;
     
-    // note the swapping of labels 0 and 1, as min time is max mass and vice versa. Note that mass is in solar masses, not Dark Sage internal units!!  m0 and m1 refer to the range of initial star masses over which the IMF is integrated.
+    // note the swapping of labels 0 and 1, as min time is max mass and vice versa. Note that mass is in solar masses, not MAD-SAGE internal units!!  m0 and m1 refer to the range of initial star masses over which the IMF is integrated.
     
     assert(t1>t0); // no point running this otherwise
     
@@ -1197,7 +1195,7 @@ void get_RecycleFraction_and_NumSNperMass(double t0, double t1, double *stellar_
 
 double integrate_m_IMF(double m0, double m1)
 {
-    // Definite integral of m*IMF between m0 and m1. Mass unit is solar (not the Dark Sage internal mass unit).
+    // Definite integral of m*IMF between m0 and m1. Mass unit is solar (not the MAD-SAGE internal mass unit).
     if(m1<1)
         printf("Have not added functionality for integrate_m_IMF to take m1<1 yet! Either it is time to add this to the code, or there is a bug causing this to happen.");
     assert(m1>=1);
@@ -1217,7 +1215,7 @@ double integrate_m_IMF(double m0, double m1)
 
 double indef_integral_mremnant_IMF(double m, int piece)
 {
-    // analytic indefinite integral of mremnant*IMF. Mass unit is solar (not the Dark Sage internal mass unit).    
+    // analytic indefinite integral of mremnant*IMF. Mass unit is solar (not the MAD-SAGE internal mass unit).    
     
     if(m>=50 && piece==4)
         return -0.7945925666666667 * pow(m, -0.3);

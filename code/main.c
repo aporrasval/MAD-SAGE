@@ -95,7 +95,7 @@ int main(int argc, char **argv)
 
     if(argc != 2)
     {
-        printf("\n  usage: DARK SAGE <parameterfile>\n\n");
+        printf("\n  usage: madsage <parameterfile>\n\n");
         ABORT(1);
     }
 

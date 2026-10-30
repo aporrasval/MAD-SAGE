@@ -94,9 +94,7 @@ struct GALAXY_OUTPUT
   float BH_JetPower;
   float BH_JetEfficiency;
   float BH_RadiativeEfficiency;
-  float Eddrate;
-  float RadioEddrate;    // supply-based Eddington ratio for radio (hot-gas) channel
-  float InstaEddrate;    // supply-based Eddington ratio for instability channel
+  float Eddrate;         
   float PrimaryBHMass;
   float SecondaryBHMass;
   float PrimaryBHSpin;
@@ -233,9 +231,7 @@ struct GALAXY_OUTPUT_LARGE // new for age dimension
   float BH_JetPower;  
   float BH_JetEfficiency;
   float BH_RadiativeEfficiency;
-  float Eddrate;
-  float RadioEddrate;    // supply-based Eddington ratio for radio (hot-gas) channel
-  float InstaEddrate;    // supply-based Eddington ratio for instability channel
+  float Eddrate;        
   float PrimaryBHMass;
   float SecondaryBHMass;
   float PrimaryBHSpin;
@@ -388,9 +384,7 @@ struct GALAXY
   double BH_JetPower;  
   double BH_JetEfficiency;
   double BH_RadiativeEfficiency;
-  double Eddrate;
-  double RadioEddrate;   // supply-based Eddington ratio for radio (hot-gas) channel
-  double InstaEddrate;   // supply-based Eddington ratio for instability channel
+  double Eddrate;        
   double PrimaryBHMass;
   double SecondaryBHMass;
   double PrimaryBHSpin;

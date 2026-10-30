@@ -20,16 +20,19 @@
 #    MA 02111-1307  USA
 #
 
+import glob
 import logging
 import multiprocessing
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 
 import numpy as np
 
+import analysis
 import common
 
 
@@ -150,7 +153,7 @@ def run_shark(particle, *args):
     _, simu, model, _ = common.read_configuration(opts.config)
     modeldir = common.get_shark_output_dir(shark_output_base, simu, model)
 
-# here is where things are executed.  I will need to modify my parameter file here and then run Dark Sage
+# here is where things are executed.  I will need to modify my parameter file here and then run MAD-SAGE
     cmdline = [opts.shark_binary, opts.config,
                '-o', 'execution.output_directory=%s' % shark_output_base,
                '-o', 'execution.simulation_batches=%s' % ' '.join(map(str, subvols))]
@@ -168,48 +171,117 @@ def run_shark(particle, *args):
 
 
 
-def run_darksage(particle, *args):
-    
+# number of particles evaluated by this (worker) process; used to give each
+# temporary .par file a unique name
+_n_evaluations = 0
+
+def run_madsage(particle, *args):
+
     # space is the thing containing the parameter values for the model
     opts, space, subvols, statTest = args
-    
-    # create/clear directory for temporary Dark Sage output
+
+    # Set simulation info (h, Omega, volume, file list, a_list) in this process.
+    # Pool workers are started with 'spawn' on macOS and so do not inherit the
+    # configure() call made in main.py.
+    import constraints
+    constraints.configure(opts.config)
+
+    # Spawned workers also start with no logging handlers, so logger.info/warning
+    # calls below (including the 'Particle ... evaluated to' lines that
+    # post_analysis.py parses from the captured stdout) would be silently dropped.
+    # Send them to stdout in the same format main.py uses. (Under 'fork' the
+    # handlers are inherited and this does nothing.)
+    if not logging.root.handlers:
+        logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+                            format='%(asctime)-15s %(name)s#%(funcName)s:%(lineno)s %(message)s')
+
+    # The PSO works in search coordinates (log10 for is_log parameters);
+    # convert to the physical values MAD-SAGE expects.
+    values = analysis.to_physical(particle, space)
+
+    # create/clear directory for temporary MAD-SAGE output
     spid = str(multiprocessing.current_process().pid)
     _autocalib_dir = os.path.normpath(os.path.abspath(os.path.dirname(__file__)))
-    modeldir = os.path.join(_autocalib_dir, 'DS_output_' + spid) + '/'
+    # Per-particle MAD-SAGE output lives inside the run's output directory (-o),
+    # e.g. minimillennium/MS_output_<pid>/, so everything from one run stays together
+    # (previously autocalibration/DS_output_<pid>/). It is still deleted after evaluation.
+    # Renamed DS_output_<pid> -> MS_output_<pid> (MAD-SAGE) on 2026-10-30.
+    modeldir = os.path.join(opts.outdir, 'MS_output_' + spid) + '/'
     if not os.path.exists(modeldir): os.makedirs(modeldir)
-    if os.path.isfile(modeldir + 'model_z0.000_0'): subprocess.call(['rm', modeldir + 'model*'])
+    # Remove stale galaxy files left by a crashed run with the same PID. (The old
+    # subprocess.call(['rm', modeldir + 'model*']) never expanded the wildcard,
+    # because no shell was involved, so it silently removed nothing.)
+    for stale in glob.glob(modeldir + '*_z*_*'):
+        os.remove(stale)
 
     # copy template parameter file and edit accordingly
-    slash = len(opts.config) - opts.config[::-1].find('/') - 1
-    temp_filename = os.path.join(_autocalib_dir, opts.config[slash+1:-4] + '_' + spid + '_temp.par')
+    # The temporary .par file is written to the temp/ folder of the run's output
+    # directory (-o), e.g. minimillennium/temp/, and kept, so every evaluated particle
+    # can be traced to the exact parameter file MAD-SAGE ran with. The name carries
+    # the worker PID and a per-worker evaluation counter so files from later
+    # iterations do not overwrite earlier ones: <par name>_<pid>_<NNNN>_temp.par
+    global _n_evaluations
+    _n_evaluations += 1
+    config_base = os.path.splitext(os.path.basename(opts.config))[0]
+    temp_dir = os.path.join(opts.outdir, 'temp')
+    os.makedirs(temp_dir, exist_ok=True)   # also created by main.py; exist_ok avoids a race between workers
+    temp_filename = os.path.join(temp_dir, '%s_%s_%04d_temp.par' % (config_base, spid, _n_evaluations))
     #
     f = open(opts.config).readlines()
-    s = open(temp_filename, 'w')
     #
-    Np = len(space['name'])
-    Ndone = 0
+    # Replace OutputDir and each free parameter. Matching is on the exact first
+    # token of the line, so e.g. 'EnergySN' cannot match a longer key that merely
+    # starts with it, and commented-out lines ('%Key', ';Key') are never touched.
+    # The whole file is scanned (no early break), so OutputDir is always replaced
+    # wherever it sits.
+    names = list(space['name'])
+    found = set()
     for l, line in enumerate(f):
-        if line[:9] == 'OutputDir': f[l] = 'OutputDir              '+modeldir+'\n'
-        for p in range(Np):
-            if line[:len(space['name'][p])] == space['name'][p]: 
-                f[l] = space['name'][p]+'          '+str(round(particle[p],5))+'\n'
-                Ndone += 1
-        if Ndone==Np: break
+        tokens = line.split()
+        if not tokens:
+            continue
+        key = tokens[0]
+        if key == 'OutputDir':
+            f[l] = 'OutputDir              ' + modeldir + '\n'
+            found.add(key)
+        elif key in names:
+            # 6 significant figures, e.g. 0.713934 or 8.36414e+50
+            f[l] = '%-28s %.6g\n' % (key, values[names.index(key)])
+            found.add(key)
+    missing = [n for n in ['OutputDir'] + names if n not in found]
+    if missing:
+        raise RuntimeError('Parameter(s) %s not found in %s; refusing to run with the '
+                           'template values instead' % (', '.join(missing), opts.config))
     #
-    s.writelines(f)
-    s.close()
+    with open(temp_filename, 'w') as s:
+        s.writelines(f)
 
     # currently assuming that serial in parallel here is the best
     print(temp_filename)
 #    cmdline = ['mpirun', '-np', '8', opts.shark_binary, temp_filename]
     repo_root = os.path.normpath(os.path.join(_autocalib_dir, '..'))
     cmdline = [opts.shark_binary, temp_filename]
-    _exec_shark('Executing Dark Sage instance', cmdline, cwd=repo_root)
+    _exec_shark('Executing MAD-SAGE instance', cmdline, cwd=repo_root)
 
     # changed to now take the weighted sum of logs of the (summed) reduced chi^2 of each constraint
-    total = 10**sum(np.log10(np.sum(_evaluate(c, statTest, modeldir, subvols))*c.weight) for c in opts.constraints)
-    logger.info('Particle %r evaluated to %f', particle, total)
+    #
+    # Objective = 10**( sum_i w_i * log10(stat_i) ) = prod_i stat_i**w_i.
+    # Previously the weight sat inside the log, log10(stat_i * w_i), which only
+    # multiplied the objective by the constant prod_i w_i and so had no effect on
+    # which particle was best. With all weights equal to 1 both forms agree.
+    # Both statistics are positive (chi2 >= 0; studentT is a negative
+    # log-likelihood > 0), so the log is defined; anything else is reported and
+    # scored as +inf so the PSO never treats it as a good fit.
+    stats = [np.sum(_evaluate(c, statTest, modeldir, subvols)) for c in opts.constraints]
+    if all(np.isfinite(v) and v > 0 for v in stats):
+        total = 10**sum(c.weight * np.log10(v) for c, v in zip(opts.constraints, stats))
+    else:
+        logger.warning('Non-positive or non-finite statistic %r for particle %r; scoring as inf',
+                       stats, values)
+        total = np.inf
+    logger.info('Particle %r evaluated to %f (par file: %s)', values, total, os.path.basename(temp_filename))
 
+    # MAD-SAGE galaxy output is large and is always removed; the small temp .par
+    # file is kept in the output directory (see above)
     shutil.rmtree(modeldir)
     return total

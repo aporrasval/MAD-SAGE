@@ -339,15 +339,7 @@ void evolve_galaxies(int halonr, int ngal)	// note: halonr is here the FOF-backg
         Gal[p].MergTime = estimate_merging_time(p, centralgal);
   }
 
-  // Reset BH rate accumulators before the sub-step loop so that += below gives
-  // the snapshot-averaged rate rather than only the last sub-step's value.
-  for(p = 0; p < ngal; p++) {
-      if(Gal[p].mergeType > 0) continue;
-      Gal[p].InstaBHaccreted = 0.0;
-      Gal[p].RadioBHaccreted = 0.0;
-  }
-
-  // we integrate things forward by using a number of intervals equal to STEPS
+  // we integrate things forward by using a number of intervals equal to STEPS 
   for(step = 0; step < STEPS; step++)
   {
 
@@ -457,9 +449,9 @@ void evolve_galaxies(int halonr, int ngal)	// note: halonr is here the FOF-backg
       double radio_net = evolve_black_hole(p, dt);
 
       // DeltaBlackHoleMass now holds the instability-driven fraction of the net increment.
-      // Accumulate into InstaBlackHoleMass and sum net mass for snapshot-averaged rate.
+      // Accumulate it into InstaBlackHoleMass and record the per-sub-step rate.
       Gal[p].InstaBlackHoleMass += Gal[p].DeltaBlackHoleMass;
-      Gal[p].InstaBHaccreted    += Gal[p].DeltaBlackHoleMass;
+      Gal[p].InstaBHaccreted     = Gal[p].DeltaBlackHoleMass / dt;
 
       // -----------------------------------------------------------------------
       // PHASE 3: AGN feedback and gas cooling onto the disc
@@ -626,18 +618,14 @@ void evolve_galaxies(int halonr, int ngal)	// note: halonr is here the FOF-backg
     Gal[p].Cooling /= deltaT;
     Gal[p].Heating /= deltaT;
 
-    // Convert accumulated net mass to snapshot-averaged rates (internal_mass / internal_time).
-    // This makes InstaBHaccreted and RadioBHaccreted consistent with the cumulative
-    // InstaBlackHoleMass / RadioBlackHoleMass fields, which accumulate over all sub-steps.
-    Gal[p].InstaBHaccreted /= deltaT;
-    Gal[p].RadioBHaccreted /= deltaT;
-    Gal[p].BHaccreted = (Gal[p].RadioBHaccreted + Gal[p].InstaBHaccreted);
+    Gal[p].BHaccreted = (Gal[p].RadioBHaccreted +  Gal[p].InstaBHaccreted);
 
     Gal[p].SNreheatRate /= deltaT;
     Gal[p].SNejectRate /= deltaT;
 
+    double BHaccreted_Msun_per_yr = Gal[p].BHaccreted * UnitMass_in_g / UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS;
     double solarmass_per_year = 6.31e25;
-    Gal[p].Lbol = Gal[p].BH_RadiativeEfficiency*Gal[p].BHaccreted*solarmass_per_year*(pow(C,2));
+    Gal[p].Lbol = Gal[p].BH_RadiativeEfficiency*BHaccreted_Msun_per_yr*solarmass_per_year*(pow(C,2));
 
     assert(Gal[p].SNreheatRate >= 0);
     assert(Gal[p].SNejectRate >= 0);
@@ -653,9 +641,7 @@ void evolve_galaxies(int halonr, int ngal)	// note: halonr is here the FOF-backg
       
   }
 
-
-
-  // attach final galaxy list to halo
+  // attach final galaxy list to halo 
   offset = 0;
   for(p = 0, currenthalo = -1; p < ngal; p++)
   {

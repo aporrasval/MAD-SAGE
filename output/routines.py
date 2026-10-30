@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 import sys
 import os
 
-def galdtype_darksage(Nannuli=30, Nage=30):
+def galdtype_madsage(Nannuli=30,Nage=30):
     floattype = np.float32
-
+    
     # Account for whether age bins are used for stars or not
     if Nage>1:
         disc_arr_dim = (Nannuli,Nage)
@@ -60,8 +60,6 @@ def galdtype_darksage(Nannuli=30, Nage=30):
                     ('BH_JetEfficiency'                     , floattype),
                     ('BH_RadiativeEfficiency'       , floattype),                       
                     ('Eddrate'                      , floattype),
-                    ('RadioEddrate'                 , floattype),
-                    ('InstaEddrate'                 , floattype),
                     ('PrimaryBHMass'                      , floattype),
                     ('SecondaryBHMass'                      , floattype),
                     ('PrimaryBHSpin'                      , floattype),
@@ -119,14 +117,17 @@ def galdtype_darksage(Nannuli=30, Nage=30):
                     ('QuasarEnergy'                      , floattype),
                     ('AGNheating'                      , floattype),
                     ('AGNfountain'                      , floattype),  
-                    ('DeltaBlackHoleMass'                     , floattype),
+                    ('CurrentRadioBlackHoleMass'                      , floattype),  
                     ('BHaccreted'                      , floattype),
                     ('BondiBHaccreted'                      , floattype),
                     ('RadioBHaccreted'                      , floattype),
-                    ('InstaBHaccreted'                      , floattype),
+                    ('InstaBHaccreted'                      , floattype),                    
                     ('RadioBlackHoleMass'                      , floattype),
                     ('InstaBlackHoleMass'                      , floattype),
-                    ('MergerBlackHoleMass'                     , floattype),
+                    # MergerBlackHoleMass must sit here to match struct GALAXY_OUTPUT(_LARGE) in code/core_allvars.h.
+                    # It was missing, which made the dtype 8 bytes shorter than the C record (13432 vs 13440 with
+                    # Nannuli=30, Nage=30) and misaligned every galaxy after the first in each output file.
+                    ('MergerBlackHoleMass'                      , floattype),
                     ('Lbol'                      , floattype),
                     ('LastMajorMerger'              , floattype),
                     ('LastMinorMerger'              , floattype),
@@ -146,12 +147,12 @@ def galdtype_darksage(Nannuli=30, Nage=30):
 
 
 
-def darksage_out_single(fname, fields=[], Nannuli=30, Nage=1):
-    # Read a single Dark Sage output file, returning all the galaxy data
+def madsage_out_single(fname, fields=[], Nannuli=30, Nage=1):
+    # Read a single MAD-SAGE output file, returning all the galaxy data
     # fname is the full name for the file to read, including its path
     # fields is the list of fields you want to read in.  If empty, will read all fields.
     
-    Galdesc = galdtype_darksage(Nannuli, Nage)
+    Galdesc = galdtype_madsage(Nannuli, Nage)
     
     fin = open(fname, 'rb')  # Open the file
     Ntrees = np.fromfile(fin,np.dtype(np.int32),1)  # Read number of trees in file
@@ -204,12 +205,12 @@ def darksage_out_single(fname, fields=[], Nannuli=30, Nage=1):
      
 
 
-def darksage_snap(fpre, filelist, fields=[], Nannuli=30, Nage=1):
-    # Read full Dark Sage snapshot, going through each file and compiling into 1 array
+def madsage_snap(fpre, filelist, fields=[], Nannuli=30, Nage=1):
+    # Read full MAD-SAGE snapshot, going through each file and compiling into 1 array
     # fpre is the name of the file up until the _ before the file number
     # filelist contains all the file numbers you want to read in
     
-    Galdesc = galdtype_darksage(Nannuli, Nage)
+    Galdesc = galdtype_madsage(Nannuli, Nage)
     NtotGalsSum = 0
     Gempty = np.empty(0, dtype=Galdesc)
 
@@ -1051,3 +1052,12 @@ def return_fraction_and_SN_ChabrierIMF(m_min=0.1, m_max=100.0, A=0.84342328, k=0
     ncum_SN[m<1] = np.max(ncum_SN)
 
     return m, lifetime, returned_mass_fraction_integrated, ncum_SN
+
+
+# Backward-compatible aliases (2026-10-30): the reader functions were renamed from
+# darksage_* / galdtype_darksage to madsage_* / galdtype_madsage when the code and
+# executable were renamed to madsage. These keep older plotting scripts and
+# notebooks that still call the old names working; new code should use the madsage names.
+galdtype_darksage = galdtype_madsage
+darksage_out_single = madsage_out_single
+darksage_snap = madsage_snap
